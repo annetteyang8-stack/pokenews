@@ -1,0 +1,1149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Centre</title>
+<style>
+  :root {
+    --bg: #f5f5f7;
+    --surface: #ffffff;
+    --border: #e2e2e6;
+    --text: #1c1c1e;
+    --text-dim: #6e6e76;
+    --accent: #d1453b;
+    --accent-dim: #f7dcda;
+    --preorder: #3a6ea5;
+    --preorder-dim: #dce8f4;
+    --restock: #3a8a5d;
+    --restock-dim: #dcf0e4;
+    --radius: 10px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17181c;
+      --surface: #212228;
+      --border: #34353c;
+      --text: #eceded;
+      --text-dim: #9a9ba3;
+      --accent: #e5716a;
+      --accent-dim: #3a2523;
+      --preorder: #6ea3d8;
+      --preorder-dim: #1f2b38;
+      --restock: #6bc294;
+      --restock-dim: #1c3327;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header.app-header {
+    padding: 20px 28px 0;
+  }
+  h1 {
+    font-size: 20px;
+    margin: 0 0 14px;
+  }
+  nav.tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs button {
+    border: none;
+    background: transparent;
+    padding: 10px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  nav.tabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  nav.subtabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  nav.subtabs button {
+    border: none;
+    background: transparent;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+  nav.subtabs button.active {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .alert-dot {
+    display: none;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-left: 4px;
+  }
+  .alert-dot.flash {
+    display: inline-block;
+    animation: alert-pulse 1s ease-in-out infinite;
+  }
+  @keyframes alert-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.25; }
+  }
+  .finding-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 8px;
+  }
+  .finding-card .finding-title {
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .finding-card .finding-meta {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+  .finding-card .finding-snippet {
+    font-size: 13px;
+    margin-top: 6px;
+  }
+  .subtab-content {
+    display: none;
+  }
+  .subtab-content.active {
+    display: block;
+  }
+  main {
+    padding: 24px 28px 60px;
+    max-width: 1100px;
+  }
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+  }
+  .stat-card .label {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .stat-card .value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-top: 4px;
+  }
+  section.panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  section.panel h2 {
+    font-size: 15px;
+    margin: 0 0 14px;
+  }
+  .field-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px;
+    align-items: end;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  input, select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th, td {
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  th {
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pill.preorder { background: var(--preorder-dim); color: var(--preorder); }
+  .pill.restock { background: var(--restock-dim); color: var(--restock); }
+  .delete-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .delete-btn:hover { color: var(--accent); }
+  .empty-note {
+    color: var(--text-dim);
+    font-size: 13px;
+    padding: 10px 0;
+  }
+  #predictionTable td > div + div {
+    margin-top: 4px;
+  }
+  .toolbar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+  select#filterSupplier {
+    max-width: 200px;
+  }
+</style>
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Command Centre</h1>
+  <nav class="tabs">
+    <button class="active" data-tab="pokemon">Pokémon Hobby</button>
+  </nav>
+</header>
+
+<main>
+  <section id="tab-pokemon">
+
+    <nav class="subtabs">
+      <button class="active" data-subtab="predict">Predict</button>
+      <button data-subtab="pokecenter">PokéCenter Watch <span class="alert-dot" id="pokecenterAlertDot"></span></button>
+    </nav>
+
+    <datalist id="supplierList"></datalist>
+    <datalist id="knownItemList"></datalist>
+
+    <div id="subtab-predict" class="subtab-content active">
+
+    <div class="stat-row" id="statRow"></div>
+
+    <section class="panel">
+      <h2>Predict preorder / restock windows</h2>
+      <div class="field-grid">
+        <div>
+          <label for="p-focus">Focus</label>
+          <select id="p-focus">
+            <option value="costco">Costco Canada (West) — restock</option>
+            <option value="pokemoncenter">Pokémon Center — preorder</option>
+            <option value="other">Other supplier — restock</option>
+          </select>
+        </div>
+        <div id="p-other-supplier-wrap">
+          <label for="p-other-supplier">Supplier</label>
+          <select id="p-other-supplier"></select>
+        </div>
+        <div>
+          <label for="p-year">Year</label>
+          <select id="p-year"></select>
+        </div>
+        <div>
+          <button class="primary" id="refreshPredictBtn">Update predictions</button>
+        </div>
+        <div>
+          <button class="secondary" id="addReleaseBtn">Add product</button>
+        </div>
+      </div>
+      <div id="seasonalSummary" style="margin-top:14px;"></div>
+      <div id="predictionTable" style="margin-top:14px;"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Supplier averages</h2>
+      <div id="supplierSummary"></div>
+    </section>
+
+    <section class="panel">
+      <div class="toolbar">
+        <select id="filterSupplier">
+          <option value="">All suppliers</option>
+        </select>
+        <button class="primary" id="addPurchaseBtn">Add purchase</button>
+        <button class="secondary" id="exportBtn">Export JSON</button>
+        <button class="secondary" id="importBtn">Import JSON</button>
+        <input type="file" id="importFile" accept="application/json" style="display:none">
+      </div>
+      <h2>Purchase log</h2>
+      <div class="empty-note" style="padding-bottom:8px;">Use "Costco Canada (West)" and "Pokémon Center" exactly to match the dedicated Predict views.</div>
+      <div id="logTable"></div>
+    </section>
+
+    </div>
+
+    <div id="subtab-pokecenter" class="subtab-content">
+      <section class="panel">
+        <h2>Pokémon Center — TCG Cards watch</h2>
+        <div class="empty-note" id="pokecenterMeta"></div>
+        <div id="pokecenterFindings" style="margin-top:14px;"></div>
+      </section>
+    </div>
+
+  </section>
+</main>
+
+<script src="pokemoncenter-data.js"></script>
+<script>
+const STORAGE_KEY = 'commandCentre.pokemon.purchases';
+
+// Official Pokémon TCG release calendar (source: Pokemon TCG 2025 calendar; 2026 from icv2.com/articles/news/view/61079)
+const DEFAULT_KNOWN_RELEASES = [
+  { name: 'Scarlet & Violet: 151', date: '2023-09-22' },
+  { name: 'Surging Sparks', date: '2024-11-08' },
+  { name: 'Scarlet & Violet: Prismatic Evolutions', date: '2025-01-17' },
+  { name: 'Scarlet & Violet: Blooming Waters Premium Collection', date: '2025-02-07' },
+  { name: 'Azure Legends Tin Cases', date: '2025-02-21' },
+  { name: 'Stacking Tin Displays', date: '2025-03-07' },
+  { name: '2024 World Championship Decks', date: '2025-03-07' },
+  { name: 'Scarlet & Violet: Journey Together', date: '2025-03-28' },
+  { name: "Hop's Zacian ex Box", date: '2025-03-28' },
+  { name: 'Charizard ex Special Collection (April 2025)', date: '2025-04-07' },
+  { name: "Iono's Bellibolt ex Premium Collection", date: '2025-04-11' },
+  { name: 'Lillie Premium Tournament Collection', date: '2025-04-25' },
+  { name: 'Dragapult ex League Battle Deck', date: '2025-04-25' },
+  { name: 'Scarlet & Violet: Prismatic Evolutions Super-Premium Collection', date: '2025-05-16' },
+  { name: 'Slashing Legends Tins', date: '2025-05-16' },
+  { name: 'Pokemon TCG: Rival Battle Decks', date: '2025-05-16' },
+  { name: 'Scarlet & Violet: Destined Rivals', date: '2025-05-30' },
+  { name: "Cynthia's Garchomp ex Premium Collection", date: '2025-06-13' },
+  { name: 'Masks of Ogerpon ex Premium Collection', date: '2025-06-13' },
+  { name: "Team Rocket's Mewtwo ex Box", date: '2025-06-13' },
+  { name: 'Charizard ex Special Collection (June 2025)', date: '2025-06-27' },
+  { name: 'Scarlet & Violet: Black Bolt', date: '2025-07-18' },
+  { name: 'Scarlet & Violet: White Flare', date: '2025-07-18' },
+  { name: 'Pokemon TCG: Holiday Calendar 2025', date: '2025-08-22' },
+  { name: 'Team Rocket Tins', date: '2025-09-05' },
+  { name: 'Mega Evolution (Main Series Expansion)', date: '2025-09-25' },
+  { name: 'Phantasmal Flames', date: '2025-11-14' },
+  { name: 'Pokemon Day 2026 Collection', date: '2026-01-30' },
+  { name: 'Mega Evolution: Ascended Heroes', date: '2026-01-30' },
+  { name: 'Mega Evolution: Ascended Heroes Elite Trainer Box and Mini Tins', date: '2026-02-20' },
+  { name: 'Mega Charizard ex Tins', date: '2026-02-20' },
+  { name: 'Mega Evolution: Ascended Heroes Premium Poster Collection', date: '2026-03-20' },
+  { name: 'Mega Evolution: Perfect Order', date: '2026-03-20' },
+  { name: '2025 World Championships Decks', date: '2026-04-03' },
+  { name: 'Pokemon TCG: First Partner Collection, Series 2', date: '2026-04-20' },
+  { name: 'Mega Evolution: Ascended Heroes Booster Bundle', date: '2026-04-24' },
+  { name: 'Mega Evolution: Chaos Rising', date: '2026-05-22' },
+  { name: 'Mega Zygarde ex Premium Collection', date: '2026-05-22' },
+  { name: 'Mega Lucario ex League Battle Deck', date: '2026-05-22' },
+  { name: 'Lumiose City Mini Tins', date: '2026-06-05' },
+  { name: 'Mega Greninja ex Premium Collection', date: '2026-07-03' },
+  { name: 'Pokemon TCG: Mega Evolution – Pitch Black', date: '2026-07-17' },
+  { name: 'Pokemon TCG: First Partner Collection, Series 3', date: '2026-08-07' },
+  { name: 'Pokemon TCG: Mega Forces Tins', date: '2026-08-28' },
+  { name: 'Pokemon TCG: 30th Celebration', date: '2026-09-16' },
+  { name: '30th Celebration: Elite Trainer Box', date: '2026-09-16' },
+  { name: '30th Celebration: Sylveon & Greninja ex Boxes', date: '2026-09-16' },
+  { name: '30th Celebration: Poster Collection', date: '2026-09-16' },
+  { name: '30th Celebration: Tech Sticker Collections', date: '2026-09-16' },
+  { name: '30th Celebration: Eevee 2-Pack Blister', date: '2026-09-16' },
+  { name: '30th Celebration: Knockout Collection', date: '2026-09-16' },
+  { name: '30th Celebration: Binder Collection', date: '2026-10-02' },
+  { name: '30th Celebration: Booster Bundle', date: '2026-10-02' },
+  { name: '30th Celebration: Mini Tins', date: '2026-10-02' },
+  { name: '30th Celebration: Espeon & Umbreon Battle Decks', date: '2026-10-30' },
+  { name: '30th Celebration: Ditto Premium Collection', date: '2026-11-06' },
+  { name: '30th Celebration: Mew & Mewtwo Figure Collections', date: '2026-11-06' },
+  { name: '30th Celebration: Day & Night Ultra-Premium Collections', date: '2026-11-06' },
+  { name: '30th Celebration: Celebration Tins', date: '2026-12-04' },
+  { name: 'Mega Evolution: Delta Reign', date: '2026-11-06' }
+];
+const KNOWN_RELEASES_KEY = 'commandCentre.pokemon.knownReleases';
+function loadKnownReleases() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(KNOWN_RELEASES_KEY));
+    if (Array.isArray(saved) && saved.length) return saved;
+  } catch {}
+  return DEFAULT_KNOWN_RELEASES.map(r => ({ ...r }));
+}
+function saveKnownReleases() {
+  localStorage.setItem(KNOWN_RELEASES_KEY, JSON.stringify(knownReleases));
+}
+let knownReleases = loadKnownReleases();
+
+function findKnownRelease(name) {
+  const target = (name || '').trim().toLowerCase();
+  return knownReleases.find(r => r.name.toLowerCase() === target);
+}
+
+const SUPPLIER_COSTCO_WEST = 'Costco Canada (West)';
+const SUPPLIER_POKEMON_CENTER = 'Pokémon Center';
+
+function loadPurchases() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+  } catch {
+    return [];
+  }
+}
+function savePurchases(list) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+}
+let purchases = loadPurchases();
+let editingPurchaseId = null;
+let editingReleaseIdx = null;
+let draftPurchaseId = null;
+let draftReleaseIdx = null;
+
+function daysBetween(dateA, dateB) {
+  const a = new Date(dateA + 'T00:00:00Z');
+  const b = new Date(dateB + 'T00:00:00Z');
+  return Math.round((b - a) / 86400000);
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  return new Date(d + 'T00:00:00Z').toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+}
+
+function offsetForEntry(p) {
+  const known = findKnownRelease(p.set);
+  if (!known) return null;
+  if (p.type === 'preorder') {
+    return daysBetween(p.transactionDate, known.date); // positive = days before release
+  }
+  return daysBetween(known.date, p.transactionDate); // positive = days after release
+}
+
+function stdDev(arr, mean) {
+  if (arr.length < 2) return 0;
+  const variance = arr.reduce((sum, v) => sum + (v - mean) ** 2, 0) / (arr.length - 1);
+  return Math.sqrt(variance);
+}
+
+function confidenceLabel(n) {
+  if (n >= 4) return 'High';
+  if (n >= 2) return 'Medium';
+  return 'Low';
+}
+
+function supplierStats() {
+  const map = {};
+  purchases.forEach(p => {
+    const offset = offsetForEntry(p);
+    if (offset === null) return;
+    if (!map[p.supplier]) map[p.supplier] = { preorder: [], restock: [] };
+    map[p.supplier][p.type].push(offset);
+  });
+  const stats = {};
+  Object.entries(map).forEach(([supplier, groups]) => {
+    const avg = arr => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    const preorderAvg = avg(groups.preorder);
+    const restockAvg = avg(groups.restock);
+    stats[supplier] = {
+      preorderAvg,
+      preorderCount: groups.preorder.length,
+      preorderStdDev: stdDev(groups.preorder, preorderAvg),
+      restockAvg,
+      restockCount: groups.restock.length,
+      restockStdDev: stdDev(groups.restock, restockAvg)
+    };
+  });
+  return stats;
+}
+
+function renderStatRow() {
+  const totalSpend = purchases.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
+  const suppliers = new Set(purchases.map(p => p.supplier)).size;
+  const el = document.getElementById('statRow');
+  el.innerHTML = `
+    <div class="stat-card"><div class="label">Total purchases</div><div class="value">${purchases.length}</div></div>
+    <div class="stat-card"><div class="label">Suppliers tracked</div><div class="value">${suppliers}</div></div>
+    <div class="stat-card"><div class="label">Total spend</div><div class="value">$${totalSpend.toFixed(2)}</div></div>
+  `;
+}
+
+function renderKnownItemList() {
+  const historyItems = [...new Set(purchases.map(p => p.item))].sort();
+  document.getElementById('knownItemList').innerHTML =
+    historyItems.map(n => `<option value="${escapeHtml(n)}">`).join('');
+}
+
+function setOptionsHtml(selectedSet) {
+  const sorted = [...knownReleases].sort((a, b) => b.date.localeCompare(a.date));
+  return '<option value="">— doesn\'t match a set —</option>' +
+    sorted.map(r => `<option value="${escapeHtml(r.name)}" ${r.name === selectedSet ? 'selected' : ''}>${escapeHtml(r.name)} (${fmtDate(r.date)})</option>`).join('');
+}
+
+function renderSupplierDatalist() {
+  const historical = [...new Set(purchases.map(p => p.supplier))];
+  const allSuppliers = [...new Set([...historical, SUPPLIER_COSTCO_WEST, SUPPLIER_POKEMON_CENTER])].sort();
+  document.getElementById('supplierList').innerHTML =
+    allSuppliers.map(s => `<option value="${escapeHtml(s)}">`).join('');
+
+  const otherSuppliers = historical
+    .filter(s => s !== SUPPLIER_COSTCO_WEST && s !== SUPPLIER_POKEMON_CENTER)
+    .sort();
+  const otherSelect = document.getElementById('p-other-supplier');
+  const currentOther = otherSelect.value;
+  otherSelect.innerHTML = otherSuppliers.length
+    ? otherSuppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')
+    : '<option value="">No other suppliers yet</option>';
+  if (otherSuppliers.includes(currentOther)) otherSelect.value = currentOther;
+
+  const filterSelect = document.getElementById('filterSupplier');
+  const currentFilter = filterSelect.value;
+  filterSelect.innerHTML = '<option value="">All suppliers</option>' +
+    [...historical].sort().map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  if (historical.includes(currentFilter)) filterSelect.value = currentFilter;
+}
+
+function updateFocusVisibility() {
+  const focus = document.getElementById('p-focus').value;
+  document.getElementById('p-other-supplier-wrap').style.display = focus === 'other' ? '' : 'none';
+}
+
+function renderSupplierSummary() {
+  const stats = supplierStats();
+  const el = document.getElementById('supplierSummary');
+  const entries = Object.entries(stats);
+  if (!entries.length) {
+    el.innerHTML = '<div class="empty-note">Log a few purchases to see supplier averages here.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Supplier</th>
+          <th>Avg preorder lead time</th>
+          <th>Avg restock lag time</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${entries.map(([supplier, s]) => `
+          <tr>
+            <td>${escapeHtml(supplier)}</td>
+            <td>${s.preorderCount ? `${s.preorderAvg.toFixed(1)} ± ${s.preorderStdDev.toFixed(1)} days before release <span class="pill preorder">${confidenceLabel(s.preorderCount)} · n=${s.preorderCount}</span>` : '<span class="empty-note">no data</span>'}</td>
+            <td>${s.restockCount ? `${s.restockAvg.toFixed(1)} ± ${s.restockStdDev.toFixed(1)} days after release <span class="pill restock">${confidenceLabel(s.restockCount)} · n=${s.restockCount}</span>` : '<span class="empty-note">no data</span>'}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderLogTable() {
+  const filter = document.getElementById('filterSupplier').value;
+  const rows = purchases
+    .filter(p => !filter || p.supplier === filter)
+    .slice()
+    .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
+
+  const el = document.getElementById('logTable');
+  if (!rows.length) {
+    el.innerHTML = '<div class="empty-note">No purchases logged yet.</div>';
+    return;
+  }
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Transaction date</th>
+          <th>Supplier</th>
+          <th>Item</th>
+          <th>Set</th>
+          <th>Type</th>
+          <th>Offset vs release</th>
+          <th>Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(p => {
+          if (p.id === editingPurchaseId) {
+            return `
+              <tr data-id="${p.id}">
+                <td><input type="date" class="edit-txndate" value="${p.transactionDate}"></td>
+                <td><input type="text" class="edit-supplier" value="${escapeHtml(p.supplier)}" list="supplierList"></td>
+                <td><input type="text" class="edit-item" value="${escapeHtml(p.item)}" list="knownItemList"></td>
+                <td><select class="edit-set">${setOptionsHtml(p.set)}</select></td>
+                <td>
+                  <select class="edit-type">
+                    <option value="preorder" ${p.type === 'preorder' ? 'selected' : ''}>Preorder</option>
+                    <option value="restock" ${p.type === 'restock' ? 'selected' : ''}>Restock</option>
+                  </select>
+                </td>
+                <td><span class="empty-note">—</span></td>
+                <td><input type="number" step="0.01" min="0" class="edit-price" value="${p.price ?? ''}"></td>
+                <td>
+                  <button class="secondary log-save-btn" data-id="${p.id}">Save</button>
+                  <button class="secondary log-cancel-btn" data-id="${p.id}">Cancel</button>
+                </td>
+              </tr>
+            `;
+          }
+          const offset = offsetForEntry(p);
+          let offsetLabel = '<span class="empty-note">not linked to a set</span>';
+          if (offset !== null) {
+            offsetLabel = p.type === 'preorder'
+              ? `${offset} day${Math.abs(offset) === 1 ? '' : 's'} before release`
+              : `${offset} day${Math.abs(offset) === 1 ? '' : 's'} after release`;
+          }
+          return `
+            <tr data-id="${p.id}">
+              <td>${fmtDate(p.transactionDate)}</td>
+              <td>${escapeHtml(p.supplier)}</td>
+              <td>${escapeHtml(p.item)}</td>
+              <td>${p.set ? escapeHtml(p.set) : '<span class="empty-note">—</span>'}</td>
+              <td><span class="pill ${p.type}">${p.type}</span></td>
+              <td>${offsetLabel}</td>
+              <td>${p.price ? '$' + Number(p.price).toFixed(2) : '—'}</td>
+              <td>
+                <button class="secondary log-edit-btn" data-id="${p.id}">Edit</button>
+                <button class="delete-btn" data-id="${p.id}" title="Delete">✕</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+  el.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      purchases = purchases.filter(p => p.id !== btn.dataset.id);
+      savePurchases(purchases);
+      renderAll();
+    });
+  });
+  el.querySelectorAll('.log-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editingPurchaseId = btn.dataset.id;
+      renderLogTable();
+    });
+  });
+  el.querySelectorAll('.log-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      if (id === draftPurchaseId) {
+        purchases = purchases.filter(p => p.id !== id);
+        draftPurchaseId = null;
+      }
+      editingPurchaseId = null;
+      renderLogTable();
+    });
+  });
+  el.querySelectorAll('.log-save-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const row = btn.closest('tr');
+      const purchase = purchases.find(p => p.id === id);
+      const transactionDate = row.querySelector('.edit-txndate').value;
+      const supplier = row.querySelector('.edit-supplier').value.trim();
+      const item = row.querySelector('.edit-item').value.trim();
+      if (!transactionDate || !supplier || !item) {
+        alert('Transaction date, supplier, and item are required.');
+        return;
+      }
+      purchase.transactionDate = transactionDate;
+      purchase.supplier = supplier;
+      purchase.item = item;
+      purchase.set = row.querySelector('.edit-set').value;
+      purchase.type = row.querySelector('.edit-type').value;
+      const priceVal = row.querySelector('.edit-price').value;
+      purchase.price = priceVal ? Number(priceVal) : null;
+      savePurchases(purchases);
+      if (id === draftPurchaseId) draftPurchaseId = null;
+      editingPurchaseId = null;
+      renderAll();
+    });
+  });
+}
+
+function escapeHtml(str) {
+  return String(str ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+function renderYearSelect() {
+  const select = document.getElementById('p-year');
+  const years = [...new Set(knownReleases.map(r => r.date.slice(0, 4)))].sort();
+  const current = select.value;
+  select.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+  const thisYear = String(new Date().getFullYear());
+  if (years.includes(current)) select.value = current;
+  else if (years.includes(thisYear)) select.value = thisYear;
+}
+
+function findActualMatch(supplier, setName, type, predictedDate) {
+  const matches = purchases.filter(p =>
+    p.supplier === supplier &&
+    p.type === type &&
+    (p.set || '').trim().toLowerCase() === setName.trim().toLowerCase()
+  );
+  if (!matches.length) return null;
+  matches.sort((a, b) =>
+    Math.abs(daysBetween(predictedDate, a.transactionDate)) -
+    Math.abs(daysBetween(predictedDate, b.transactionDate))
+  );
+  return matches[0];
+}
+
+function accuracyLabel(predictedDate, actual) {
+  if (!actual) return '<span class="empty-note">no purchase logged yet</span>';
+  const diff = daysBetween(predictedDate, actual.transactionDate);
+  if (diff === 0) return 'Exact match';
+  return diff > 0
+    ? `${diff} day${diff === 1 ? '' : 's'} later than predicted`
+    : `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} earlier than predicted`;
+}
+
+function normalizeSupplierName(s) {
+  return (s || '')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function supplierEmptyInsight(supplier, type) {
+  const exact = purchases.filter(p => p.supplier === supplier);
+  const typeExact = exact.filter(p => p.type === type);
+  const normalizedTarget = normalizeSupplierName(supplier);
+  const similar = purchases.filter(p => p.supplier !== supplier && normalizeSupplierName(p.supplier) === normalizedTarget);
+  return {
+    totalExact: exact.length,
+    typeExact: typeExact.length,
+    similarCount: similar.length,
+    similarNames: [...new Set(similar.map(p => p.supplier))]
+  };
+}
+
+function supplierEmptyMessage(supplier, type, insight) {
+  if (insight.similarCount > 0) {
+    return `Found ${insight.similarCount} purchase${insight.similarCount === 1 ? '' : 's'} logged under a slightly different supplier name ("${escapeHtml(insight.similarNames.join('", "'))}") — rename to exactly "${escapeHtml(supplier)}" so it counts.`;
+  }
+  if (insight.totalExact === 0) {
+    return `No purchases logged for ${escapeHtml(supplier)} yet.`;
+  }
+  if (insight.typeExact === 0) {
+    return `You have ${insight.totalExact} ${escapeHtml(supplier)} purchase${insight.totalExact === 1 ? '' : 's'} logged, but none marked as ${type}.`;
+  }
+  return `You have ${insight.typeExact} ${type} purchase${insight.typeExact === 1 ? '' : 's'} for ${escapeHtml(supplier)}, but the item name${insight.typeExact === 1 ? '' : 's'} didn't match a known product — check spelling against the item list.`;
+}
+
+const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function seasonalPattern(supplier) {
+  const months = purchases
+    .filter(p => p.supplier === supplier)
+    .map(p => new Date(p.transactionDate + 'T00:00:00Z').getUTCMonth());
+  const active = [...new Set(months)].sort((a, b) => a - b);
+  const quiet = MONTH_NAMES.map((_, i) => i).filter(i => !active.includes(i));
+  return {
+    count: months.length,
+    active: active.map(i => MONTH_NAMES[i]),
+    quiet: quiet.map(i => MONTH_NAMES[i])
+  };
+}
+
+function renderSeasonalSummary(supplier) {
+  const el = document.getElementById('seasonalSummary');
+  if (!supplier) {
+    el.innerHTML = '';
+    return;
+  }
+  const { count, active, quiet } = seasonalPattern(supplier);
+  if (!count) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `
+    <div class="empty-note">
+      Based on <strong>${count}</strong> purchase${count === 1 ? '' : 's'} logged for ${escapeHtml(supplier)} —
+      historically active months: <strong>${active.join(', ')}</strong>.
+      ${quiet.length ? `Quiet months: ${quiet.join(', ')}.` : ''}
+    </div>
+  `;
+}
+
+function focusConfig() {
+  const focus = document.getElementById('p-focus').value;
+  if (focus === 'costco') return { supplier: SUPPLIER_COSTCO_WEST, type: 'restock' };
+  if (focus === 'pokemoncenter') return { supplier: SUPPLIER_POKEMON_CENTER, type: 'preorder' };
+  return { supplier: document.getElementById('p-other-supplier').value, type: 'restock' };
+}
+
+function renderPredictionTable() {
+  const { supplier, type } = focusConfig();
+  const year = document.getElementById('p-year').value;
+  const el = document.getElementById('predictionTable');
+
+  renderSeasonalSummary(supplier);
+
+  if (!supplier) {
+    el.innerHTML = '<div class="empty-note">Log a restock purchase from another supplier to see this view.</div>';
+    return;
+  }
+
+  const stats = supplierStats()[supplier];
+  const avgKey = type + 'Avg';
+  const countKey = type + 'Count';
+  const stdDevKey = type + 'StdDev';
+  const releases = knownReleases
+    .filter(r => r.date.slice(0, 4) === year)
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  if (!releases.length) {
+    el.innerHTML = '<div class="empty-note">No known Pokémon product releases for this year.</div>';
+    return;
+  }
+
+  const typeLabel = type === 'preorder' ? 'preorder open' : 'restock';
+  const emptyMsg = (!stats || !stats[countKey])
+    ? supplierEmptyMessage(supplier, type, supplierEmptyInsight(supplier, type))
+    : '';
+
+  el.innerHTML = `
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Official release date</th>
+          <th>Predicted ${typeLabel} date</th>
+          <th>Confidence</th>
+          <th>Accuracy vs actual purchase</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${releases.map(r => {
+          const globalIdx = knownReleases.indexOf(r);
+          const isEditing = editingReleaseIdx === globalIdx;
+          const productCell = isEditing
+            ? `<input type="text" class="edit-release-name" value="${escapeHtml(r.name)}">`
+            : escapeHtml(r.name);
+          const dateCell = isEditing
+            ? `<input type="date" class="edit-release-date" value="${r.date}">`
+            : fmtDate(r.date);
+          const actionsCell = isEditing
+            ? `<button class="secondary release-save-btn" data-idx="${globalIdx}">Save</button> <button class="secondary release-cancel-btn" data-idx="${globalIdx}">Cancel</button>`
+            : `<button class="secondary release-edit-btn" data-idx="${globalIdx}">Edit</button> <button class="delete-btn release-delete-btn" data-idx="${globalIdx}" title="Delete">✕</button>`;
+
+          const n = stats ? stats[countKey] : 0;
+          if (!n) {
+            return `
+              <tr data-idx="${globalIdx}">
+                <td>${productCell}</td>
+                <td>${dateCell}</td>
+                <td><span class="empty-note">${emptyMsg}</span></td>
+                <td>—</td>
+                <td>—</td>
+                <td>${actionsCell}</td>
+              </tr>
+            `;
+          }
+          const avgVal = stats[avgKey];
+          const sd = Math.round(stats[stdDevKey]);
+          const predicted = type === 'preorder'
+            ? addDays(r.date, -Math.round(avgVal))
+            : addDays(r.date, Math.round(avgVal));
+          const actual = findActualMatch(supplier, r.name, type, predicted);
+          const rangeLabel = sd > 0 ? ` (±${sd}d)` : '';
+          return `
+            <tr data-idx="${globalIdx}">
+              <td>${productCell}</td>
+              <td>${dateCell}</td>
+              <td>${fmtDate(predicted)}${rangeLabel}</td>
+              <td>${confidenceLabel(n)} (n=${n})</td>
+              <td>${accuracyLabel(predicted, actual)}</td>
+              <td>${actionsCell}</td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+
+  el.querySelectorAll('.release-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editingReleaseIdx = Number(btn.dataset.idx);
+      renderPredictionTable();
+    });
+  });
+  el.querySelectorAll('.release-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      if (idx === draftReleaseIdx) {
+        knownReleases.splice(idx, 1);
+        draftReleaseIdx = null;
+      }
+      editingReleaseIdx = null;
+      renderPredictionTable();
+    });
+  });
+  el.querySelectorAll('.release-save-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      const row = btn.closest('tr');
+      const newName = row.querySelector('.edit-release-name').value.trim();
+      const newDate = row.querySelector('.edit-release-date').value;
+      if (!newName || !newDate) {
+        alert('Product name and official release date are required.');
+        return;
+      }
+      const oldName = knownReleases[idx].name;
+      if (oldName !== newName) {
+        purchases.forEach(p => {
+          if (p.set === oldName) p.set = newName;
+        });
+        savePurchases(purchases);
+      }
+      knownReleases[idx] = { name: newName, date: newDate };
+      saveKnownReleases();
+      if (idx === draftReleaseIdx) draftReleaseIdx = null;
+      editingReleaseIdx = null;
+      renderAll();
+    });
+  });
+  el.querySelectorAll('.release-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = Number(btn.dataset.idx);
+      knownReleases.splice(idx, 1);
+      if (idx === draftReleaseIdx) draftReleaseIdx = null;
+      if (editingReleaseIdx === idx) editingReleaseIdx = null;
+      saveKnownReleases();
+      renderAll();
+    });
+  });
+}
+
+const POKECENTER_ACK_KEY = 'commandCentre.pokemon.pokecenterAcked';
+
+function renderPokeCenterWatch() {
+  const data = window.POKEMON_CENTER_DATA || { lastChecked: null, lastChangedAt: null, findings: [] };
+  const metaEl = document.getElementById('pokecenterMeta');
+  const listEl = document.getElementById('pokecenterFindings');
+  const dot = document.getElementById('pokecenterAlertDot');
+
+  metaEl.innerHTML = data.lastChecked
+    ? `Last checked: <strong>${new Date(data.lastChecked).toLocaleString()}</strong>${data.lastChangedAt ? ` · Last change detected: <strong>${new Date(data.lastChangedAt).toLocaleString()}</strong>` : ''}`
+    : 'No checks have run yet.';
+
+  if (!data.findings || !data.findings.length) {
+    listEl.innerHTML = '<div class="empty-note">No findings yet. This fills in once the scheduled watch routine runs.</div>';
+  } else {
+    listEl.innerHTML = data.findings.map(f => `
+      <div class="finding-card">
+        <div class="finding-title"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(f.title)}</a></div>
+        <div class="finding-meta">${escapeHtml(f.source || '')} · detected ${new Date(f.detectedAt).toLocaleString()}</div>
+        ${f.snippet ? `<div class="finding-snippet">${escapeHtml(f.snippet)}</div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  const acked = localStorage.getItem(POKECENTER_ACK_KEY);
+  const isNew = data.lastChangedAt && (!acked || new Date(data.lastChangedAt) > new Date(acked));
+  dot.classList.toggle('flash', !!isNew);
+}
+
+function acknowledgePokeCenterWatch() {
+  const data = window.POKEMON_CENTER_DATA;
+  if (data && data.lastChangedAt) {
+    localStorage.setItem(POKECENTER_ACK_KEY, data.lastChangedAt);
+  }
+  document.getElementById('pokecenterAlertDot').classList.remove('flash');
+}
+
+function renderAll() {
+  renderStatRow();
+  renderKnownItemList();
+  renderYearSelect();
+  renderSupplierDatalist();
+  updateFocusVisibility();
+  renderSupplierSummary();
+  renderLogTable();
+  renderPredictionTable();
+  renderPokeCenterWatch();
+}
+
+document.getElementById('addPurchaseBtn').addEventListener('click', () => {
+  const id = uid();
+  const today = new Date().toISOString().slice(0, 10);
+  document.getElementById('filterSupplier').value = '';
+  purchases.push({
+    id, supplier: '', item: '', set: '', type: 'restock', transactionDate: today, price: null
+  });
+  draftPurchaseId = id;
+  editingPurchaseId = id;
+  renderLogTable();
+});
+
+document.getElementById('addReleaseBtn').addEventListener('click', () => {
+  const year = document.getElementById('p-year').value || String(new Date().getFullYear());
+  knownReleases.push({ name: '', date: `${year}-01-01` });
+  const idx = knownReleases.length - 1;
+  draftReleaseIdx = idx;
+  editingReleaseIdx = idx;
+  renderPredictionTable();
+});
+
+document.getElementById('p-focus').addEventListener('change', () => {
+  editingReleaseIdx = null;
+  updateFocusVisibility();
+  renderPredictionTable();
+});
+document.getElementById('p-other-supplier').addEventListener('change', () => {
+  editingReleaseIdx = null;
+  renderPredictionTable();
+});
+document.getElementById('p-year').addEventListener('change', () => {
+  editingReleaseIdx = null;
+  renderPredictionTable();
+});
+document.getElementById('refreshPredictBtn').addEventListener('click', () => {
+  renderSupplierDatalist();
+  renderSupplierSummary();
+  renderPredictionTable();
+});
+
+document.getElementById('filterSupplier').addEventListener('change', renderLogTable);
+
+document.getElementById('exportBtn').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(purchases, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `command-centre-pokemon-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('importBtn').addEventListener('click', () => {
+  document.getElementById('importFile').click();
+});
+document.getElementById('importFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const imported = JSON.parse(reader.result);
+      if (!Array.isArray(imported)) throw new Error('not an array');
+      purchases = imported;
+      savePurchases(purchases);
+      renderAll();
+      alert(`Imported ${imported.length} purchases.`);
+    } catch (err) {
+      alert('Could not import file: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
+function seedCostcoPurchases() {
+  const SEED_FLAG = 'commandCentre.pokemon.costcoSeedV1';
+  if (localStorage.getItem(SEED_FLAG)) return;
+
+  const seeds = [
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Scarlet & Violet 151 Mini Tins (5-pack)', set: 'Scarlet & Violet: 151', type: 'restock', transactionDate: '2025-03-28', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Surging Sparks ETB & Booster Bundle 2-pack', set: 'Surging Sparks', type: 'restock', transactionDate: '2025-09-18', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: '2025 Holiday Calendar 2-pack', set: 'Pokemon TCG: Holiday Calendar 2025', type: 'restock', transactionDate: '2025-09-09', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Prismatic Evolutions Eevee Evolutions Mini Tins (8-pack)', set: 'Scarlet & Violet: Prismatic Evolutions', type: 'restock', transactionDate: '2025-10-14', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Prismatic Evolutions ETB & Booster Bundle 2-pack', set: 'Scarlet & Violet: Prismatic Evolutions', type: 'restock', transactionDate: '2025-11-27', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Unova Heavy Hitters Premium Collection', set: 'Scarlet & Violet: Black Bolt', type: 'restock', transactionDate: '2026-02-24', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Mega Charizard ex Ultra Premium Collection (UPC) box', set: 'Phantasmal Flames', type: 'restock', transactionDate: '2026-02-26', price: null },
+    { supplier: SUPPLIER_COSTCO_WEST, item: 'Pokeball 3-pack', set: '', type: 'restock', transactionDate: '2026-03-28', price: null }
+  ];
+
+  const existingKeys = new Set(purchases.map(p => `${p.supplier}|${p.item}|${p.transactionDate}`));
+  seeds.forEach(s => {
+    const key = `${s.supplier}|${s.item}|${s.transactionDate}`;
+    if (!existingKeys.has(key)) {
+      purchases.push({ id: uid(), ...s });
+    }
+  });
+  savePurchases(purchases);
+  localStorage.setItem(SEED_FLAG, '1');
+}
+
+document.querySelectorAll('nav.subtabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.subtabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.subtab-content').forEach(c => c.classList.remove('active'));
+    document.getElementById(`subtab-${btn.dataset.subtab}`).classList.add('active');
+    if (btn.dataset.subtab === 'pokecenter') acknowledgePokeCenterWatch();
+  });
+});
+
+seedCostcoPurchases();
+renderAll();
+</script>
+</body>
+</html>
