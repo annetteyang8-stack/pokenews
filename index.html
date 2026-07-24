@@ -326,11 +326,9 @@
         </select>
         <button class="primary" id="addPurchaseBtn">Add purchase</button>
         <button class="secondary" id="exportBtn">Export JSON</button>
-        <button class="secondary" id="importBtn">Import JSON</button>
-        <input type="file" id="importFile" accept="application/json" style="display:none">
       </div>
       <h2>Purchase log</h2>
-      <div class="empty-note" style="padding-bottom:8px;">Use "Costco Canada (West)" and "Pokémon Center" exactly to match the dedicated Predict views.</div>
+      <div class="empty-note" style="padding-bottom:8px;">Use "Costco Canada (West)" and "Pokémon Center" exactly to match the dedicated Predict views. Data is shared via Supabase — anyone with this page's URL can view and edit it.</div>
       <div id="logTable"></div>
     </section>
 
@@ -347,109 +345,111 @@
   </section>
 </main>
 
-<script src="pokemoncenter-data.js"></script>
 <script>
-const STORAGE_KEY = 'commandCentre.pokemon.purchases';
+const SUPABASE_URL = 'https://aqixujzpqtnuzvbalefg.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFxaXh1anpwcXRudXp2YmFsZWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ4MjIxODYsImV4cCI6MjEwMDM5ODE4Nn0.9m48j7hNh3z68MytsDQjP_AHIKkr0dz2fQ--iS5KeOM';
 
-// Official Pokémon TCG release calendar (source: Pokemon TCG 2025 calendar; 2026 from icv2.com/articles/news/view/61079)
-const DEFAULT_KNOWN_RELEASES = [
-  { name: 'Scarlet & Violet: 151', date: '2023-09-22' },
-  { name: 'Surging Sparks', date: '2024-11-08' },
-  { name: 'Scarlet & Violet: Prismatic Evolutions', date: '2025-01-17' },
-  { name: 'Scarlet & Violet: Blooming Waters Premium Collection', date: '2025-02-07' },
-  { name: 'Azure Legends Tin Cases', date: '2025-02-21' },
-  { name: 'Stacking Tin Displays', date: '2025-03-07' },
-  { name: '2024 World Championship Decks', date: '2025-03-07' },
-  { name: 'Scarlet & Violet: Journey Together', date: '2025-03-28' },
-  { name: "Hop's Zacian ex Box", date: '2025-03-28' },
-  { name: 'Charizard ex Special Collection (April 2025)', date: '2025-04-07' },
-  { name: "Iono's Bellibolt ex Premium Collection", date: '2025-04-11' },
-  { name: 'Lillie Premium Tournament Collection', date: '2025-04-25' },
-  { name: 'Dragapult ex League Battle Deck', date: '2025-04-25' },
-  { name: 'Scarlet & Violet: Prismatic Evolutions Super-Premium Collection', date: '2025-05-16' },
-  { name: 'Slashing Legends Tins', date: '2025-05-16' },
-  { name: 'Pokemon TCG: Rival Battle Decks', date: '2025-05-16' },
-  { name: 'Scarlet & Violet: Destined Rivals', date: '2025-05-30' },
-  { name: "Cynthia's Garchomp ex Premium Collection", date: '2025-06-13' },
-  { name: 'Masks of Ogerpon ex Premium Collection', date: '2025-06-13' },
-  { name: "Team Rocket's Mewtwo ex Box", date: '2025-06-13' },
-  { name: 'Charizard ex Special Collection (June 2025)', date: '2025-06-27' },
-  { name: 'Scarlet & Violet: Black Bolt', date: '2025-07-18' },
-  { name: 'Scarlet & Violet: White Flare', date: '2025-07-18' },
-  { name: 'Pokemon TCG: Holiday Calendar 2025', date: '2025-08-22' },
-  { name: 'Team Rocket Tins', date: '2025-09-05' },
-  { name: 'Mega Evolution (Main Series Expansion)', date: '2025-09-25' },
-  { name: 'Phantasmal Flames', date: '2025-11-14' },
-  { name: 'Pokemon Day 2026 Collection', date: '2026-01-30' },
-  { name: 'Mega Evolution: Ascended Heroes', date: '2026-01-30' },
-  { name: 'Mega Evolution: Ascended Heroes Elite Trainer Box and Mini Tins', date: '2026-02-20' },
-  { name: 'Mega Charizard ex Tins', date: '2026-02-20' },
-  { name: 'Mega Evolution: Ascended Heroes Premium Poster Collection', date: '2026-03-20' },
-  { name: 'Mega Evolution: Perfect Order', date: '2026-03-20' },
-  { name: '2025 World Championships Decks', date: '2026-04-03' },
-  { name: 'Pokemon TCG: First Partner Collection, Series 2', date: '2026-04-20' },
-  { name: 'Mega Evolution: Ascended Heroes Booster Bundle', date: '2026-04-24' },
-  { name: 'Mega Evolution: Chaos Rising', date: '2026-05-22' },
-  { name: 'Mega Zygarde ex Premium Collection', date: '2026-05-22' },
-  { name: 'Mega Lucario ex League Battle Deck', date: '2026-05-22' },
-  { name: 'Lumiose City Mini Tins', date: '2026-06-05' },
-  { name: 'Mega Greninja ex Premium Collection', date: '2026-07-03' },
-  { name: 'Pokemon TCG: Mega Evolution – Pitch Black', date: '2026-07-17' },
-  { name: 'Pokemon TCG: First Partner Collection, Series 3', date: '2026-08-07' },
-  { name: 'Pokemon TCG: Mega Forces Tins', date: '2026-08-28' },
-  { name: 'Pokemon TCG: 30th Celebration', date: '2026-09-16' },
-  { name: '30th Celebration: Elite Trainer Box', date: '2026-09-16' },
-  { name: '30th Celebration: Sylveon & Greninja ex Boxes', date: '2026-09-16' },
-  { name: '30th Celebration: Poster Collection', date: '2026-09-16' },
-  { name: '30th Celebration: Tech Sticker Collections', date: '2026-09-16' },
-  { name: '30th Celebration: Eevee 2-Pack Blister', date: '2026-09-16' },
-  { name: '30th Celebration: Knockout Collection', date: '2026-09-16' },
-  { name: '30th Celebration: Binder Collection', date: '2026-10-02' },
-  { name: '30th Celebration: Booster Bundle', date: '2026-10-02' },
-  { name: '30th Celebration: Mini Tins', date: '2026-10-02' },
-  { name: '30th Celebration: Espeon & Umbreon Battle Decks', date: '2026-10-30' },
-  { name: '30th Celebration: Ditto Premium Collection', date: '2026-11-06' },
-  { name: '30th Celebration: Mew & Mewtwo Figure Collections', date: '2026-11-06' },
-  { name: '30th Celebration: Day & Night Ultra-Premium Collections', date: '2026-11-06' },
-  { name: '30th Celebration: Celebration Tins', date: '2026-12-04' },
-  { name: 'Mega Evolution: Delta Reign', date: '2026-11-06' }
-];
-const KNOWN_RELEASES_KEY = 'commandCentre.pokemon.knownReleases';
-function loadKnownReleases() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(KNOWN_RELEASES_KEY));
-    if (Array.isArray(saved) && saved.length) return saved;
-  } catch {}
-  return DEFAULT_KNOWN_RELEASES.map(r => ({ ...r }));
-}
-function saveKnownReleases() {
-  localStorage.setItem(KNOWN_RELEASES_KEY, JSON.stringify(knownReleases));
-}
-let knownReleases = loadKnownReleases();
-
-function findKnownRelease(name) {
-  const target = (name || '').trim().toLowerCase();
-  return knownReleases.find(r => r.name.toLowerCase() === target);
+async function sb(path, options = {}) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    ...options,
+    headers: {
+      apikey: SUPABASE_ANON_KEY,
+      Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      'Content-Type': 'application/json',
+      ...(options.headers || {})
+    }
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Supabase ${res.status}: ${text}`);
+  }
+  if (res.status === 204) return null;
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
 }
 
 const SUPPLIER_COSTCO_WEST = 'Costco Canada (West)';
 const SUPPLIER_POKEMON_CENTER = 'Pokémon Center';
 
-function loadPurchases() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
-  } catch {
-    return [];
-  }
-}
-function savePurchases(list) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
-}
-let purchases = loadPurchases();
+let knownReleases = [];
+let purchases = [];
+let pokeCenterFindings = [];
+let pokeCenterStatus = { last_checked_at: null, last_changed_at: null };
 let editingPurchaseId = null;
-let editingReleaseIdx = null;
-let draftPurchaseId = null;
-let draftReleaseIdx = null;
+let editingReleaseId = null;
+
+async function loadKnownReleasesFromDB() {
+  const rows = await sb('known_releases?select=*&order=release_date.asc');
+  knownReleases = rows.map(r => ({ id: r.id, name: r.name, date: r.release_date }));
+}
+
+async function loadPurchasesFromDB() {
+  const rows = await sb('purchases?select=*&order=transaction_date.desc');
+  purchases = rows.map(r => ({
+    id: r.id, supplier: r.supplier, item: r.item, set: r.set_name,
+    type: r.type, transactionDate: r.transaction_date, price: r.price
+  }));
+}
+
+async function loadPokeCenterData() {
+  const [findings, statusRows] = await Promise.all([
+    sb('pokemon_center_findings?select=*&order=detected_at.desc&limit=30'),
+    sb('pokemon_center_status?select=*&limit=1')
+  ]);
+  pokeCenterFindings = findings;
+  pokeCenterStatus = statusRows[0] || { last_checked_at: null, last_changed_at: null };
+}
+
+async function insertPurchase(p) {
+  const [row] = await sb('purchases', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify([{
+      supplier: p.supplier, item: p.item, set_name: p.set || null,
+      type: p.type, transaction_date: p.transactionDate, price: p.price
+    }])
+  });
+  return { id: row.id, supplier: row.supplier, item: row.item, set: row.set_name, type: row.type, transactionDate: row.transaction_date, price: row.price };
+}
+
+async function updatePurchase(id, p) {
+  await sb(`purchases?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      supplier: p.supplier, item: p.item, set_name: p.set || null,
+      type: p.type, transaction_date: p.transactionDate, price: p.price
+    })
+  });
+}
+
+async function deletePurchase(id) {
+  await sb(`purchases?id=eq.${id}`, { method: 'DELETE' });
+}
+
+async function insertRelease(r) {
+  const [row] = await sb('known_releases', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify([{ name: r.name, release_date: r.date }])
+  });
+  return { id: row.id, name: row.name, date: row.release_date };
+}
+
+async function updateRelease(id, r) {
+  await sb(`known_releases?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name: r.name, release_date: r.date })
+  });
+}
+
+async function deleteRelease(id) {
+  await sb(`known_releases?id=eq.${id}`, { method: 'DELETE' });
+}
+
+function findKnownRelease(name) {
+  const target = (name || '').trim().toLowerCase();
+  return knownReleases.find(r => r.name.toLowerCase() === target);
+}
 
 function daysBetween(dateA, dateB) {
   const a = new Date(dateA + 'T00:00:00Z');
@@ -465,10 +465,6 @@ function addDays(dateStr, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-}
-
 function offsetForEntry(p) {
   const known = findKnownRelease(p.set);
   if (!known) return null;
@@ -596,6 +592,27 @@ function renderSupplierSummary() {
   `;
 }
 
+function purchaseEditCells(p) {
+  return `
+    <td><input type="date" class="edit-txndate" value="${p.transactionDate}"></td>
+    <td><input type="text" class="edit-supplier" value="${escapeHtml(p.supplier)}" list="supplierList"></td>
+    <td><input type="text" class="edit-item" value="${escapeHtml(p.item)}" list="knownItemList"></td>
+    <td><select class="edit-set">${setOptionsHtml(p.set)}</select></td>
+    <td>
+      <select class="edit-type">
+        <option value="preorder" ${p.type === 'preorder' ? 'selected' : ''}>Preorder</option>
+        <option value="restock" ${p.type === 'restock' ? 'selected' : ''}>Restock</option>
+      </select>
+    </td>
+    <td><span class="empty-note">—</span></td>
+    <td><input type="number" step="0.01" min="0" class="edit-price" value="${p.price ?? ''}"></td>
+    <td>
+      <button class="secondary log-save-btn" data-id="${p.id}">Save</button>
+      <button class="secondary log-cancel-btn" data-id="${p.id}">Cancel</button>
+    </td>
+  `;
+}
+
 function renderLogTable() {
   const filter = document.getElementById('filterSupplier').value;
   const rows = purchases
@@ -604,10 +621,19 @@ function renderLogTable() {
     .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
 
   const el = document.getElementById('logTable');
-  if (!rows.length) {
+
+  const newRowHtml = editingPurchaseId === '__new__'
+    ? `<tr data-id="__new__">${purchaseEditCells({
+        id: '__new__', supplier: '', item: '', set: '', type: 'restock',
+        transactionDate: new Date().toISOString().slice(0, 10), price: null
+      })}</tr>`
+    : '';
+
+  if (!rows.length && !newRowHtml) {
     el.innerHTML = '<div class="empty-note">No purchases logged yet.</div>';
     return;
   }
+
   el.innerHTML = `
     <table>
       <thead>
@@ -623,28 +649,10 @@ function renderLogTable() {
         </tr>
       </thead>
       <tbody>
+        ${newRowHtml}
         ${rows.map(p => {
           if (p.id === editingPurchaseId) {
-            return `
-              <tr data-id="${p.id}">
-                <td><input type="date" class="edit-txndate" value="${p.transactionDate}"></td>
-                <td><input type="text" class="edit-supplier" value="${escapeHtml(p.supplier)}" list="supplierList"></td>
-                <td><input type="text" class="edit-item" value="${escapeHtml(p.item)}" list="knownItemList"></td>
-                <td><select class="edit-set">${setOptionsHtml(p.set)}</select></td>
-                <td>
-                  <select class="edit-type">
-                    <option value="preorder" ${p.type === 'preorder' ? 'selected' : ''}>Preorder</option>
-                    <option value="restock" ${p.type === 'restock' ? 'selected' : ''}>Restock</option>
-                  </select>
-                </td>
-                <td><span class="empty-note">—</span></td>
-                <td><input type="number" step="0.01" min="0" class="edit-price" value="${p.price ?? ''}"></td>
-                <td>
-                  <button class="secondary log-save-btn" data-id="${p.id}">Save</button>
-                  <button class="secondary log-cancel-btn" data-id="${p.id}">Cancel</button>
-                </td>
-              </tr>
-            `;
+            return `<tr data-id="${p.id}">${purchaseEditCells(p)}</tr>`;
           }
           const offset = offsetForEntry(p);
           let offsetLabel = '<span class="empty-note">not linked to a set</span>';
@@ -673,10 +681,16 @@ function renderLogTable() {
     </table>
   `;
   el.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      purchases = purchases.filter(p => p.id !== btn.dataset.id);
-      savePurchases(purchases);
-      renderAll();
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await deletePurchase(btn.dataset.id);
+        purchases = purchases.filter(p => p.id !== btn.dataset.id);
+        renderAll();
+      } catch (err) {
+        alert('Could not delete: ' + err.message);
+        btn.disabled = false;
+      }
     });
   });
   el.querySelectorAll('.log-edit-btn').forEach(btn => {
@@ -687,38 +701,40 @@ function renderLogTable() {
   });
   el.querySelectorAll('.log-cancel-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const id = btn.dataset.id;
-      if (id === draftPurchaseId) {
-        purchases = purchases.filter(p => p.id !== id);
-        draftPurchaseId = null;
-      }
       editingPurchaseId = null;
       renderLogTable();
     });
   });
   el.querySelectorAll('.log-save-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', async () => {
       const id = btn.dataset.id;
       const row = btn.closest('tr');
-      const purchase = purchases.find(p => p.id === id);
       const transactionDate = row.querySelector('.edit-txndate').value;
       const supplier = row.querySelector('.edit-supplier').value.trim();
       const item = row.querySelector('.edit-item').value.trim();
+      const set = row.querySelector('.edit-set').value;
+      const type = row.querySelector('.edit-type').value;
+      const priceVal = row.querySelector('.edit-price').value;
+      const price = priceVal ? Number(priceVal) : null;
       if (!transactionDate || !supplier || !item) {
         alert('Transaction date, supplier, and item are required.');
         return;
       }
-      purchase.transactionDate = transactionDate;
-      purchase.supplier = supplier;
-      purchase.item = item;
-      purchase.set = row.querySelector('.edit-set').value;
-      purchase.type = row.querySelector('.edit-type').value;
-      const priceVal = row.querySelector('.edit-price').value;
-      purchase.price = priceVal ? Number(priceVal) : null;
-      savePurchases(purchases);
-      if (id === draftPurchaseId) draftPurchaseId = null;
-      editingPurchaseId = null;
-      renderAll();
+      btn.disabled = true;
+      try {
+        if (id === '__new__') {
+          const created = await insertPurchase({ supplier, item, set, type, transactionDate, price });
+          purchases.push(created);
+        } else {
+          await updatePurchase(id, { supplier, item, set, type, transactionDate, price });
+          Object.assign(purchases.find(p => p.id === id), { supplier, item, set, type, transactionDate, price });
+        }
+        editingPurchaseId = null;
+        renderAll();
+      } catch (err) {
+        alert('Could not save: ' + err.message);
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -868,6 +884,19 @@ function renderPredictionTable() {
     ? supplierEmptyMessage(supplier, type, supplierEmptyInsight(supplier, type))
     : '';
 
+  const newReleaseRowHtml = editingReleaseId === '__new__'
+    ? `
+      <tr data-id="__new__">
+        <td><input type="text" class="edit-release-name" value=""></td>
+        <td><input type="date" class="edit-release-date" value="${year}-01-01"></td>
+        <td><span class="empty-note">—</span></td>
+        <td>—</td>
+        <td>—</td>
+        <td><button class="secondary release-save-btn" data-id="__new__">Save</button> <button class="secondary release-cancel-btn" data-id="__new__">Cancel</button></td>
+      </tr>
+    `
+    : '';
+
   el.innerHTML = `
     <table>
       <thead>
@@ -881,9 +910,9 @@ function renderPredictionTable() {
         </tr>
       </thead>
       <tbody>
+        ${newReleaseRowHtml}
         ${releases.map(r => {
-          const globalIdx = knownReleases.indexOf(r);
-          const isEditing = editingReleaseIdx === globalIdx;
+          const isEditing = editingReleaseId === r.id;
           const productCell = isEditing
             ? `<input type="text" class="edit-release-name" value="${escapeHtml(r.name)}">`
             : escapeHtml(r.name);
@@ -891,13 +920,13 @@ function renderPredictionTable() {
             ? `<input type="date" class="edit-release-date" value="${r.date}">`
             : fmtDate(r.date);
           const actionsCell = isEditing
-            ? `<button class="secondary release-save-btn" data-idx="${globalIdx}">Save</button> <button class="secondary release-cancel-btn" data-idx="${globalIdx}">Cancel</button>`
-            : `<button class="secondary release-edit-btn" data-idx="${globalIdx}">Edit</button> <button class="delete-btn release-delete-btn" data-idx="${globalIdx}" title="Delete">✕</button>`;
+            ? `<button class="secondary release-save-btn" data-id="${r.id}">Save</button> <button class="secondary release-cancel-btn" data-id="${r.id}">Cancel</button>`
+            : `<button class="secondary release-edit-btn" data-id="${r.id}">Edit</button> <button class="delete-btn release-delete-btn" data-id="${r.id}" title="Delete">✕</button>`;
 
           const n = stats ? stats[countKey] : 0;
           if (!n) {
             return `
-              <tr data-idx="${globalIdx}">
+              <tr data-id="${r.id}">
                 <td>${productCell}</td>
                 <td>${dateCell}</td>
                 <td><span class="empty-note">${emptyMsg}</span></td>
@@ -915,7 +944,7 @@ function renderPredictionTable() {
           const actual = findActualMatch(supplier, r.name, type, predicted);
           const rangeLabel = sd > 0 ? ` (±${sd}d)` : '';
           return `
-            <tr data-idx="${globalIdx}">
+            <tr data-id="${r.id}">
               <td>${productCell}</td>
               <td>${dateCell}</td>
               <td>${fmtDate(predicted)}${rangeLabel}</td>
@@ -931,24 +960,19 @@ function renderPredictionTable() {
 
   el.querySelectorAll('.release-edit-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      editingReleaseIdx = Number(btn.dataset.idx);
+      editingReleaseId = btn.dataset.id;
       renderPredictionTable();
     });
   });
   el.querySelectorAll('.release-cancel-btn').forEach(btn => {
     btn.addEventListener('click', () => {
-      const idx = Number(btn.dataset.idx);
-      if (idx === draftReleaseIdx) {
-        knownReleases.splice(idx, 1);
-        draftReleaseIdx = null;
-      }
-      editingReleaseIdx = null;
+      editingReleaseId = null;
       renderPredictionTable();
     });
   });
   el.querySelectorAll('.release-save-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = Number(btn.dataset.idx);
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
       const row = btn.closest('tr');
       const newName = row.querySelector('.edit-release-name').value.trim();
       const newDate = row.querySelector('.edit-release-date').value;
@@ -956,28 +980,46 @@ function renderPredictionTable() {
         alert('Product name and official release date are required.');
         return;
       }
-      const oldName = knownReleases[idx].name;
-      if (oldName !== newName) {
-        purchases.forEach(p => {
-          if (p.set === oldName) p.set = newName;
-        });
-        savePurchases(purchases);
+      btn.disabled = true;
+      try {
+        if (id === '__new__') {
+          const created = await insertRelease({ name: newName, date: newDate });
+          knownReleases.push(created);
+        } else {
+          const existing = knownReleases.find(r => r.id === id);
+          const oldName = existing.name;
+          await updateRelease(id, { name: newName, date: newDate });
+          existing.name = newName;
+          existing.date = newDate;
+          if (oldName !== newName) {
+            // Postgres cascades the rename to purchases.set_name (ON UPDATE CASCADE) —
+            // refetch so the local copy reflects it.
+            await loadPurchasesFromDB();
+          }
+        }
+        editingReleaseId = null;
+        renderAll();
+      } catch (err) {
+        alert('Could not save: ' + err.message);
+        btn.disabled = false;
       }
-      knownReleases[idx] = { name: newName, date: newDate };
-      saveKnownReleases();
-      if (idx === draftReleaseIdx) draftReleaseIdx = null;
-      editingReleaseIdx = null;
-      renderAll();
     });
   });
   el.querySelectorAll('.release-delete-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const idx = Number(btn.dataset.idx);
-      knownReleases.splice(idx, 1);
-      if (idx === draftReleaseIdx) draftReleaseIdx = null;
-      if (editingReleaseIdx === idx) editingReleaseIdx = null;
-      saveKnownReleases();
-      renderAll();
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      btn.disabled = true;
+      try {
+        await deleteRelease(id);
+        knownReleases = knownReleases.filter(r => r.id !== id);
+        if (editingReleaseId === id) editingReleaseId = null;
+        // Postgres cascades the delete to SET NULL on purchases.set_name — refetch to reflect it.
+        await loadPurchasesFromDB();
+        renderAll();
+      } catch (err) {
+        alert('Could not delete: ' + err.message);
+        btn.disabled = false;
+      }
     });
   });
 }
@@ -985,36 +1027,37 @@ function renderPredictionTable() {
 const POKECENTER_ACK_KEY = 'commandCentre.pokemon.pokecenterAcked';
 
 function renderPokeCenterWatch() {
-  const data = window.POKEMON_CENTER_DATA || { lastChecked: null, lastChangedAt: null, findings: [] };
   const metaEl = document.getElementById('pokecenterMeta');
   const listEl = document.getElementById('pokecenterFindings');
   const dot = document.getElementById('pokecenterAlertDot');
 
-  metaEl.innerHTML = data.lastChecked
-    ? `Last checked: <strong>${new Date(data.lastChecked).toLocaleString()}</strong>${data.lastChangedAt ? ` · Last change detected: <strong>${new Date(data.lastChangedAt).toLocaleString()}</strong>` : ''}`
+  const lastChecked = pokeCenterStatus.last_checked_at;
+  const lastChanged = pokeCenterStatus.last_changed_at;
+
+  metaEl.innerHTML = lastChecked
+    ? `Last checked: <strong>${new Date(lastChecked).toLocaleString()}</strong>${lastChanged ? ` · Last change detected: <strong>${new Date(lastChanged).toLocaleString()}</strong>` : ''}`
     : 'No checks have run yet.';
 
-  if (!data.findings || !data.findings.length) {
+  if (!pokeCenterFindings.length) {
     listEl.innerHTML = '<div class="empty-note">No findings yet. This fills in once the scheduled watch routine runs.</div>';
   } else {
-    listEl.innerHTML = data.findings.map(f => `
+    listEl.innerHTML = pokeCenterFindings.map(f => `
       <div class="finding-card">
         <div class="finding-title"><a href="${escapeHtml(f.url)}" target="_blank" rel="noopener">${escapeHtml(f.title)}</a></div>
-        <div class="finding-meta">${escapeHtml(f.source || '')} · detected ${new Date(f.detectedAt).toLocaleString()}</div>
+        <div class="finding-meta">${escapeHtml(f.source || '')} · detected ${new Date(f.detected_at).toLocaleString()}</div>
         ${f.snippet ? `<div class="finding-snippet">${escapeHtml(f.snippet)}</div>` : ''}
       </div>
     `).join('');
   }
 
   const acked = localStorage.getItem(POKECENTER_ACK_KEY);
-  const isNew = data.lastChangedAt && (!acked || new Date(data.lastChangedAt) > new Date(acked));
+  const isNew = lastChanged && (!acked || new Date(lastChanged) > new Date(acked));
   dot.classList.toggle('flash', !!isNew);
 }
 
 function acknowledgePokeCenterWatch() {
-  const data = window.POKEMON_CENTER_DATA;
-  if (data && data.lastChangedAt) {
-    localStorage.setItem(POKECENTER_ACK_KEY, data.lastChangedAt);
+  if (pokeCenterStatus.last_changed_at) {
+    localStorage.setItem(POKECENTER_ACK_KEY, pokeCenterStatus.last_changed_at);
   }
   document.getElementById('pokecenterAlertDot').classList.remove('flash');
 }
@@ -1032,43 +1075,40 @@ function renderAll() {
 }
 
 document.getElementById('addPurchaseBtn').addEventListener('click', () => {
-  const id = uid();
-  const today = new Date().toISOString().slice(0, 10);
   document.getElementById('filterSupplier').value = '';
-  purchases.push({
-    id, supplier: '', item: '', set: '', type: 'restock', transactionDate: today, price: null
-  });
-  draftPurchaseId = id;
-  editingPurchaseId = id;
+  editingPurchaseId = '__new__';
   renderLogTable();
 });
 
 document.getElementById('addReleaseBtn').addEventListener('click', () => {
-  const year = document.getElementById('p-year').value || String(new Date().getFullYear());
-  knownReleases.push({ name: '', date: `${year}-01-01` });
-  const idx = knownReleases.length - 1;
-  draftReleaseIdx = idx;
-  editingReleaseIdx = idx;
+  editingReleaseId = '__new__';
   renderPredictionTable();
 });
 
 document.getElementById('p-focus').addEventListener('change', () => {
-  editingReleaseIdx = null;
+  editingReleaseId = null;
   updateFocusVisibility();
   renderPredictionTable();
 });
 document.getElementById('p-other-supplier').addEventListener('change', () => {
-  editingReleaseIdx = null;
+  editingReleaseId = null;
   renderPredictionTable();
 });
 document.getElementById('p-year').addEventListener('change', () => {
-  editingReleaseIdx = null;
+  editingReleaseId = null;
   renderPredictionTable();
 });
-document.getElementById('refreshPredictBtn').addEventListener('click', () => {
-  renderSupplierDatalist();
-  renderSupplierSummary();
-  renderPredictionTable();
+document.getElementById('refreshPredictBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('refreshPredictBtn');
+  btn.disabled = true;
+  try {
+    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadPokeCenterData()]);
+    renderAll();
+  } catch (err) {
+    alert('Could not refresh: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 document.getElementById('filterSupplier').addEventListener('change', renderLogTable);
@@ -1083,55 +1123,6 @@ document.getElementById('exportBtn').addEventListener('click', () => {
   URL.revokeObjectURL(url);
 });
 
-document.getElementById('importBtn').addEventListener('click', () => {
-  document.getElementById('importFile').click();
-});
-document.getElementById('importFile').addEventListener('change', (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const imported = JSON.parse(reader.result);
-      if (!Array.isArray(imported)) throw new Error('not an array');
-      purchases = imported;
-      savePurchases(purchases);
-      renderAll();
-      alert(`Imported ${imported.length} purchases.`);
-    } catch (err) {
-      alert('Could not import file: ' + err.message);
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-});
-
-function seedCostcoPurchases() {
-  const SEED_FLAG = 'commandCentre.pokemon.costcoSeedV1';
-  if (localStorage.getItem(SEED_FLAG)) return;
-
-  const seeds = [
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Scarlet & Violet 151 Mini Tins (5-pack)', set: 'Scarlet & Violet: 151', type: 'restock', transactionDate: '2025-03-28', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Surging Sparks ETB & Booster Bundle 2-pack', set: 'Surging Sparks', type: 'restock', transactionDate: '2025-09-18', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: '2025 Holiday Calendar 2-pack', set: 'Pokemon TCG: Holiday Calendar 2025', type: 'restock', transactionDate: '2025-09-09', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Prismatic Evolutions Eevee Evolutions Mini Tins (8-pack)', set: 'Scarlet & Violet: Prismatic Evolutions', type: 'restock', transactionDate: '2025-10-14', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Prismatic Evolutions ETB & Booster Bundle 2-pack', set: 'Scarlet & Violet: Prismatic Evolutions', type: 'restock', transactionDate: '2025-11-27', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Unova Heavy Hitters Premium Collection', set: 'Scarlet & Violet: Black Bolt', type: 'restock', transactionDate: '2026-02-24', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Mega Charizard ex Ultra Premium Collection (UPC) box', set: 'Phantasmal Flames', type: 'restock', transactionDate: '2026-02-26', price: null },
-    { supplier: SUPPLIER_COSTCO_WEST, item: 'Pokeball 3-pack', set: '', type: 'restock', transactionDate: '2026-03-28', price: null }
-  ];
-
-  const existingKeys = new Set(purchases.map(p => `${p.supplier}|${p.item}|${p.transactionDate}`));
-  seeds.forEach(s => {
-    const key = `${s.supplier}|${s.item}|${s.transactionDate}`;
-    if (!existingKeys.has(key)) {
-      purchases.push({ id: uid(), ...s });
-    }
-  });
-  savePurchases(purchases);
-  localStorage.setItem(SEED_FLAG, '1');
-}
-
 document.querySelectorAll('nav.subtabs button').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('nav.subtabs button').forEach(b => b.classList.remove('active'));
@@ -1142,8 +1133,15 @@ document.querySelectorAll('nav.subtabs button').forEach(btn => {
   });
 });
 
-seedCostcoPurchases();
-renderAll();
+(async () => {
+  try {
+    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadPokeCenterData()]);
+  } catch (err) {
+    document.body.insertAdjacentHTML('afterbegin',
+      `<div style="background:#c0392b;color:#fff;padding:10px 16px;font-size:13px;">Failed to load data from Supabase: ${escapeHtml(err.message)}</div>`);
+  }
+  renderAll();
+})();
 </script>
 </body>
 </html>
