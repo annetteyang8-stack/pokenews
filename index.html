@@ -755,29 +755,6 @@ function renderYearSelect() {
   else if (years.includes(thisYear)) select.value = thisYear;
 }
 
-function findActualMatch(supplier, setName, type, predictedDate) {
-  const matches = purchases.filter(p =>
-    p.supplier === supplier &&
-    p.type === type &&
-    (p.set || '').trim().toLowerCase() === setName.trim().toLowerCase()
-  );
-  if (!matches.length) return null;
-  matches.sort((a, b) =>
-    Math.abs(daysBetween(predictedDate, a.transactionDate)) -
-    Math.abs(daysBetween(predictedDate, b.transactionDate))
-  );
-  return matches[0];
-}
-
-function accuracyLabel(predictedDate, actual) {
-  if (!actual) return '<span class="empty-note">no purchase logged yet</span>';
-  const diff = daysBetween(predictedDate, actual.transactionDate);
-  if (diff === 0) return 'Exact match';
-  return diff > 0
-    ? `${diff} day${diff === 1 ? '' : 's'} later than predicted`
-    : `${Math.abs(diff)} day${Math.abs(diff) === 1 ? '' : 's'} earlier than predicted`;
-}
-
 function normalizeSupplierName(s) {
   return (s || '')
     .normalize('NFD')
@@ -890,8 +867,6 @@ function renderPredictionTable() {
         <td><input type="text" class="edit-release-name" value=""></td>
         <td><input type="date" class="edit-release-date" value="${year}-01-01"></td>
         <td><span class="empty-note">—</span></td>
-        <td>—</td>
-        <td>—</td>
         <td><button class="secondary release-save-btn" data-id="__new__">Save</button> <button class="secondary release-cancel-btn" data-id="__new__">Cancel</button></td>
       </tr>
     `
@@ -904,8 +879,6 @@ function renderPredictionTable() {
           <th>Product</th>
           <th>Official release date</th>
           <th>Predicted ${typeLabel} date</th>
-          <th>Confidence</th>
-          <th>Accuracy vs actual purchase</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -930,8 +903,6 @@ function renderPredictionTable() {
                 <td>${productCell}</td>
                 <td>${dateCell}</td>
                 <td><span class="empty-note">${emptyMsg}</span></td>
-                <td>—</td>
-                <td>—</td>
                 <td>${actionsCell}</td>
               </tr>
             `;
@@ -941,15 +912,12 @@ function renderPredictionTable() {
           const predicted = type === 'preorder'
             ? addDays(r.date, -Math.round(avgVal))
             : addDays(r.date, Math.round(avgVal));
-          const actual = findActualMatch(supplier, r.name, type, predicted);
           const rangeLabel = sd > 0 ? ` (±${sd}d)` : '';
           return `
             <tr data-id="${r.id}">
               <td>${productCell}</td>
               <td>${dateCell}</td>
               <td>${fmtDate(predicted)}${rangeLabel}</td>
-              <td>${confidenceLabel(n)} (n=${n})</td>
-              <td>${accuracyLabel(predicted, actual)}</td>
               <td>${actionsCell}</td>
             </tr>
           `;
