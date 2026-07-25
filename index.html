@@ -17,6 +17,8 @@
     --preorder-dim: #dce8f4;
     --restock: #3a8a5d;
     --restock-dim: #dcf0e4;
+    --medium: #b5820a;
+    --medium-dim: #f7ecd2;
     --radius: 10px;
   }
   @media (prefers-color-scheme: dark) {
@@ -32,6 +34,8 @@
       --preorder-dim: #1f2b38;
       --restock: #6bc294;
       --restock-dim: #1c3327;
+      --medium: #d8ab4f;
+      --medium-dim: #3a3120;
     }
   }
   * { box-sizing: border-box; }
@@ -233,6 +237,26 @@
   }
   .pill.preorder { background: var(--preorder-dim); color: var(--preorder); }
   .pill.restock { background: var(--restock-dim); color: var(--restock); }
+  .pill.likelihood-low { background: var(--border); color: var(--text-dim); }
+  .pill.likelihood-medium { background: var(--medium-dim); color: var(--medium); }
+  .pill.likelihood-high { background: var(--restock-dim); color: var(--restock); }
+  .likelihood-card {
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  .likelihood-card.likelihood-low { background: var(--bg); }
+  .likelihood-card.likelihood-medium { background: var(--medium-dim); }
+  .likelihood-card.likelihood-high { background: var(--restock-dim); }
+  .likelihood-card .likelihood-tier {
+    font-size: 26px;
+    font-weight: 700;
+  }
+  .likelihood-card .likelihood-explanation {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 6px;
+  }
   .delete-btn {
     background: none;
     border: none;
@@ -312,6 +336,7 @@
       </div>
       <div id="seasonalSummary" style="margin-top:14px;"></div>
       <div id="predictionTable" style="margin-top:14px;"></div>
+      <div id="costcoView" style="margin-top:14px;"></div>
     </section>
 
     <section class="panel">
@@ -373,10 +398,12 @@ const SUPPLIER_POKEMON_CENTER = 'Pokémon Center';
 
 let knownReleases = [];
 let purchases = [];
+let costcoSightings = [];
 let pokeCenterFindings = [];
 let pokeCenterStatus = { last_checked_at: null, last_changed_at: null };
 let editingPurchaseId = null;
 let editingReleaseId = null;
+let editingSightingId = null;
 
 async function loadKnownReleasesFromDB() {
   const rows = await sb('known_releases?select=*&order=release_date.asc');
@@ -389,6 +416,43 @@ async function loadPurchasesFromDB() {
     id: r.id, supplier: r.supplier, item: r.item, set: r.set_name,
     type: r.type, transactionDate: r.transaction_date, price: r.price
   }));
+}
+
+async function loadCostcoSightingsFromDB() {
+  const rows = await sb('costco_restock_sightings?select=*&order=sighted_date.desc');
+  costcoSightings = rows.map(r => ({
+    id: r.id, sightedDate: r.sighted_date, item: r.item, region: r.region,
+    locationType: r.location_type, set: r.set_name, notes: r.notes
+  }));
+}
+
+async function insertSighting(s) {
+  const [row] = await sb('costco_restock_sightings', {
+    method: 'POST',
+    headers: { Prefer: 'return=representation' },
+    body: JSON.stringify([{
+      sighted_date: s.sightedDate, item: s.item, region: s.region || null,
+      location_type: s.locationType || null, set_name: s.set || null, notes: s.notes || null
+    }])
+  });
+  return {
+    id: row.id, sightedDate: row.sighted_date, item: row.item, region: row.region,
+    locationType: row.location_type, set: row.set_name, notes: row.notes
+  };
+}
+
+async function updateSighting(id, s) {
+  await sb(`costco_restock_sightings?id=eq.${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      sighted_date: s.sightedDate, item: s.item, region: s.region || null,
+      location_type: s.locationType || null, set_name: s.set || null, notes: s.notes || null
+    })
+  });
+}
+
+async function deleteSighting(id) {
+  await sb(`costco_restock_sightings?id=eq.${id}`, { method: 'DELETE' });
 }
 
 async function loadPokeCenterData() {
@@ -478,6 +542,77 @@ function predictRestockDate(releaseDate) {
   }
   return addDays(releaseDate, -60);
 }
+
+// Costco Canada restock likelihood: real sighting history (primary signal) blended with
+// coarse seasonal context (secondary signal). Not a predicted date — Costco doesn't publish
+// a restock schedule, so this is intentionally a Low/Medium/High read on "right now."
+const COSTCO_HEAVY_MONTHS = [8, 9, 10, 11]; // Sep-Dec (0-indexed)
+const COSTCO_EASTER_MONTHS = [2, 3]; // Mar-Apr (0-indexed)
+
+function weeksBetween(dateA, dateB) {
+  return daysBetween(dateA, dateB) / 7;
+}
+
+function computeCostcoLikelihood() {
+  const today = new Date().toISOString().slice(0, 10);
+  const month = new Date(today + 'T00:00:00Z').getUTCMonth();
+
+  const seasonalTier = COSTCO_HEAVY_MONTHS.includes(month) ? 'High'
+    : COSTCO_EASTER_MONTHS.includes(month) ? 'Medium'
+    : 'Low';
+
+  const observedLags = costcoSightings
+    .filter(s => s.set)
+    .map(s => {
+      const known = findKnownRelease(s.set);
+      return known ? { weeks: weeksBetween(known.date, s.sightedDate), releaseName: known.name, item: s.item } : null;
+    })
+    .filter(Boolean);
+
+  const hotMatches = [];
+  knownReleases.forEach(r => {
+    const weeksSince = weeksBetween(r.date, today);
+    if (weeksSince < 0) return;
+    observedLags.forEach(lag => {
+      if (Math.abs(weeksSince - lag.weeks) <= 1) {
+        hotMatches.push({ release: r, weeksSince, matchedPattern: lag });
+      }
+    });
+  });
+
+  const hasRealSignal = hotMatches.length > 0;
+  let tier;
+  if (hasRealSignal) {
+    tier = seasonalTier === 'Low' ? 'Medium' : 'High';
+  } else {
+    tier = seasonalTier === 'High' ? 'Medium' : seasonalTier;
+  }
+
+  return { tier, seasonalTier, hasRealSignal, hotMatches, sightingCount: costcoSightings.length, month };
+}
+
+function costcoLikelihoodExplanation({ seasonalTier, hasRealSignal, hotMatches, sightingCount, month }) {
+  const parts = [];
+  const monthName = MONTH_NAMES[month];
+  if (seasonalTier === 'High') {
+    parts.push(`${monthName} is historically one of Costco's heaviest Pokémon stocking months (Sep–Dec)`);
+  } else if (seasonalTier === 'Medium') {
+    parts.push(`${monthName} is in the smaller Easter-season bump (Mar–Apr)`);
+  } else {
+    parts.push(`${monthName} is historically a quieter month for Costco Pokémon stock`);
+  }
+
+  if (hasRealSignal) {
+    const names = [...new Set(hotMatches.map(m => m.release.name))];
+    parts.push(`this week's timing matches a previously observed restock lag for ${names.join(', ')}`);
+  } else if (sightingCount > 0) {
+    parts.push(`no known release currently matches a previously observed restock timing (based on ${sightingCount} sighting${sightingCount === 1 ? '' : 's'} logged so far)`);
+  } else {
+    parts.push('no sighting history logged yet to cross-check against');
+  }
+  return parts.join(' — ');
+}
+
 function offsetForEntry(p) {
   const known = findKnownRelease(p.set);
   if (!known) return null;
@@ -848,6 +983,17 @@ function renderPredictionTable() {
   const { supplier, type } = focusConfig();
   const year = document.getElementById('p-year').value;
   const el = document.getElementById('predictionTable');
+  const costcoEl = document.getElementById('costcoView');
+
+  if (supplier === SUPPLIER_COSTCO_WEST) {
+    document.getElementById('seasonalSummary').innerHTML = '';
+    el.style.display = 'none';
+    costcoEl.style.display = '';
+    renderCostcoView();
+    return;
+  }
+  el.style.display = '';
+  costcoEl.style.display = 'none';
 
   renderSeasonalSummary(supplier);
 
@@ -1052,6 +1198,143 @@ function acknowledgePokeCenterWatch() {
   document.getElementById('pokecenterAlertDot').classList.remove('flash');
 }
 
+function sightingEditCells(s) {
+  return `
+    <td><input type="date" class="edit-sighting-date" value="${s.sightedDate}"></td>
+    <td><input type="text" class="edit-sighting-item" value="${escapeHtml(s.item)}"></td>
+    <td><input type="text" class="edit-sighting-region" value="${escapeHtml(s.region || '')}" placeholder="e.g. BC"></td>
+    <td><input type="text" class="edit-sighting-location" value="${escapeHtml(s.locationType || '')}" placeholder="e.g. in-warehouse"></td>
+    <td><select class="edit-sighting-set">${setOptionsHtml(s.set)}</select></td>
+    <td>
+      <button class="secondary sighting-save-btn" data-id="${s.id}">Save</button>
+      <button class="secondary sighting-cancel-btn" data-id="${s.id}">Cancel</button>
+    </td>
+  `;
+}
+
+function renderCostcoView() {
+  const el = document.getElementById('costcoView');
+  const likelihood = computeCostcoLikelihood();
+  const explanation = costcoLikelihoodExplanation(likelihood);
+  const tierClass = `likelihood-${likelihood.tier.toLowerCase()}`;
+
+  const sightingsSorted = [...costcoSightings].sort((a, b) => b.sightedDate.localeCompare(a.sightedDate));
+
+  const newRowHtml = editingSightingId === '__new__'
+    ? `<tr data-id="__new__">${sightingEditCells({
+        id: '__new__', sightedDate: new Date().toISOString().slice(0, 10), item: '', region: '', locationType: '', set: ''
+      })}</tr>`
+    : '';
+
+  el.innerHTML = `
+    <div class="likelihood-card ${tierClass}">
+      <div class="label">This week's Costco Canada (West) restock likelihood</div>
+      <div class="likelihood-tier"><span class="pill ${tierClass}">${likelihood.tier}</span></div>
+      <div class="likelihood-explanation">${escapeHtml(explanation)}</div>
+    </div>
+    <div class="toolbar">
+      <button class="primary" id="addSightingBtn">Add sighting</button>
+    </div>
+    <h2 style="font-size:14px;margin:0 0 10px;">Restock sighting log</h2>
+    <div class="empty-note" style="padding-bottom:8px;">Real sightings — yours or reported elsewhere, any region — feed the likelihood model above. Not every sighting needs to be a personal purchase.</div>
+    ${(!sightingsSorted.length && !newRowHtml) ? '<div class="empty-note">No sightings logged yet.</div>' : `
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Item</th>
+          <th>Region</th>
+          <th>Location</th>
+          <th>Set</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${newRowHtml}
+        ${sightingsSorted.map(s => {
+          if (s.id === editingSightingId) {
+            return `<tr data-id="${s.id}">${sightingEditCells(s)}</tr>`;
+          }
+          return `
+            <tr data-id="${s.id}">
+              <td>${fmtDate(s.sightedDate)}</td>
+              <td>${escapeHtml(s.item)}</td>
+              <td>${s.region ? escapeHtml(s.region) : '<span class="empty-note">—</span>'}</td>
+              <td>${s.locationType ? escapeHtml(s.locationType) : '<span class="empty-note">—</span>'}</td>
+              <td>${s.set ? escapeHtml(s.set) : '<span class="empty-note">—</span>'}</td>
+              <td>
+                <button class="secondary sighting-edit-btn" data-id="${s.id}">Edit</button>
+                <button class="delete-btn" data-id="${s.id}" title="Delete">✕</button>
+              </td>
+            </tr>
+          `;
+        }).join('')}
+      </tbody>
+    </table>
+    `}
+  `;
+
+  document.getElementById('addSightingBtn').addEventListener('click', () => {
+    editingSightingId = '__new__';
+    renderCostcoView();
+  });
+  el.querySelectorAll('.sighting-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editingSightingId = btn.dataset.id;
+      renderCostcoView();
+    });
+  });
+  el.querySelectorAll('.sighting-cancel-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editingSightingId = null;
+      renderCostcoView();
+    });
+  });
+  el.querySelectorAll('.delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        await deleteSighting(btn.dataset.id);
+        costcoSightings = costcoSightings.filter(s => s.id !== btn.dataset.id);
+        renderCostcoView();
+      } catch (err) {
+        alert('Could not delete: ' + err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+  el.querySelectorAll('.sighting-save-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      const row = btn.closest('tr');
+      const sightedDate = row.querySelector('.edit-sighting-date').value;
+      const item = row.querySelector('.edit-sighting-item').value.trim();
+      const region = row.querySelector('.edit-sighting-region').value.trim();
+      const locationType = row.querySelector('.edit-sighting-location').value.trim();
+      const set = row.querySelector('.edit-sighting-set').value;
+      if (!sightedDate || !item) {
+        alert('Date and item are required.');
+        return;
+      }
+      btn.disabled = true;
+      try {
+        if (id === '__new__') {
+          const created = await insertSighting({ sightedDate, item, region, locationType, set });
+          costcoSightings.push(created);
+        } else {
+          await updateSighting(id, { sightedDate, item, region, locationType, set });
+          Object.assign(costcoSightings.find(s => s.id === id), { sightedDate, item, region, locationType, set });
+        }
+        editingSightingId = null;
+        renderCostcoView();
+      } catch (err) {
+        alert('Could not save: ' + err.message);
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
 function renderAll() {
   renderStatRow();
   renderKnownItemList();
@@ -1092,7 +1375,7 @@ document.getElementById('refreshPredictBtn').addEventListener('click', async () 
   const btn = document.getElementById('refreshPredictBtn');
   btn.disabled = true;
   try {
-    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadPokeCenterData()]);
+    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadCostcoSightingsFromDB(), loadPokeCenterData()]);
     renderAll();
   } catch (err) {
     alert('Could not refresh: ' + err.message);
@@ -1125,7 +1408,7 @@ document.querySelectorAll('nav.subtabs button').forEach(btn => {
 
 (async () => {
   try {
-    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadPokeCenterData()]);
+    await Promise.all([loadKnownReleasesFromDB(), loadPurchasesFromDB(), loadCostcoSightingsFromDB(), loadPokeCenterData()]);
   } catch (err) {
     document.body.insertAdjacentHTML('afterbegin',
       `<div style="background:#c0392b;color:#fff;padding:10px 16px;font-size:13px;">Failed to load data from Supabase: ${escapeHtml(err.message)}</div>`);
