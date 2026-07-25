@@ -279,9 +279,6 @@
     gap: 8px;
     margin-bottom: 12px;
   }
-  select#filterSupplier {
-    max-width: 200px;
-  }
 </style>
 </head>
 <body>
@@ -300,9 +297,6 @@
       <button class="active" data-subtab="predict">Predict</button>
       <button data-subtab="pokecenter">PokéCenter Watch <span class="alert-dot" id="pokecenterAlertDot"></span></button>
     </nav>
-
-    <datalist id="supplierList"></datalist>
-    <datalist id="knownItemList"></datalist>
 
     <div id="subtab-predict" class="subtab-content active">
 
@@ -342,19 +336,6 @@
     <section class="panel">
       <h2>Supplier averages</h2>
       <div id="supplierSummary"></div>
-    </section>
-
-    <section class="panel">
-      <div class="toolbar">
-        <select id="filterSupplier">
-          <option value="">All suppliers</option>
-        </select>
-        <button class="primary" id="addPurchaseBtn">Add purchase</button>
-        <button class="secondary" id="exportBtn">Export JSON</button>
-      </div>
-      <h2>Purchase log</h2>
-      <div class="empty-note" style="padding-bottom:8px;">Use "Costco Canada (West)" and "Pokémon Center" exactly to match the dedicated Predict views. Data is shared via Supabase — anyone with this page's URL can view and edit it.</div>
-      <div id="logTable"></div>
     </section>
 
     </div>
@@ -401,7 +382,6 @@ let purchases = [];
 let costcoSightings = [];
 let pokeCenterFindings = [];
 let pokeCenterStatus = { last_checked_at: null, last_changed_at: null };
-let editingPurchaseId = null;
 let editingReleaseId = null;
 let editingSightingId = null;
 
@@ -462,32 +442,6 @@ async function loadPokeCenterData() {
   ]);
   pokeCenterFindings = findings;
   pokeCenterStatus = statusRows[0] || { last_checked_at: null, last_changed_at: null };
-}
-
-async function insertPurchase(p) {
-  const [row] = await sb('purchases', {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify([{
-      supplier: p.supplier, item: p.item, set_name: p.set || null,
-      type: p.type, transaction_date: p.transactionDate, price: p.price
-    }])
-  });
-  return { id: row.id, supplier: row.supplier, item: row.item, set: row.set_name, type: row.type, transactionDate: row.transaction_date, price: row.price };
-}
-
-async function updatePurchase(id, p) {
-  await sb(`purchases?id=eq.${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({
-      supplier: p.supplier, item: p.item, set_name: p.set || null,
-      type: p.type, transaction_date: p.transactionDate, price: p.price
-    })
-  });
-}
-
-async function deletePurchase(id) {
-  await sb(`purchases?id=eq.${id}`, { method: 'DELETE' });
 }
 
 async function insertRelease(r) {
@@ -670,24 +624,14 @@ function renderStatRow() {
   `;
 }
 
-function renderKnownItemList() {
-  const historyItems = [...new Set(purchases.map(p => p.item))].sort();
-  document.getElementById('knownItemList').innerHTML =
-    historyItems.map(n => `<option value="${escapeHtml(n)}">`).join('');
-}
-
 function setOptionsHtml(selectedSet) {
   const sorted = [...knownReleases].sort((a, b) => b.date.localeCompare(a.date));
   return '<option value="">— doesn\'t match a set —</option>' +
     sorted.map(r => `<option value="${escapeHtml(r.name)}" ${r.name === selectedSet ? 'selected' : ''}>${escapeHtml(r.name)} (${fmtDate(r.date)})</option>`).join('');
 }
 
-function renderSupplierDatalist() {
+function renderOtherSupplierSelect() {
   const historical = [...new Set(purchases.map(p => p.supplier))];
-  const allSuppliers = [...new Set([...historical, SUPPLIER_COSTCO_WEST, SUPPLIER_POKEMON_CENTER])].sort();
-  document.getElementById('supplierList').innerHTML =
-    allSuppliers.map(s => `<option value="${escapeHtml(s)}">`).join('');
-
   const otherSuppliers = historical
     .filter(s => s !== SUPPLIER_COSTCO_WEST && s !== SUPPLIER_POKEMON_CENTER)
     .sort();
@@ -697,12 +641,6 @@ function renderSupplierDatalist() {
     ? otherSuppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')
     : '<option value="">No other suppliers yet</option>';
   if (otherSuppliers.includes(currentOther)) otherSelect.value = currentOther;
-
-  const filterSelect = document.getElementById('filterSupplier');
-  const currentFilter = filterSelect.value;
-  filterSelect.innerHTML = '<option value="">All suppliers</option>' +
-    [...historical].sort().map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  if (historical.includes(currentFilter)) filterSelect.value = currentFilter;
 }
 
 function updateFocusVisibility() {
@@ -738,153 +676,6 @@ function renderSupplierSummary() {
       </tbody>
     </table>
   `;
-}
-
-function purchaseEditCells(p) {
-  return `
-    <td><input type="date" class="edit-txndate" value="${p.transactionDate}"></td>
-    <td><input type="text" class="edit-supplier" value="${escapeHtml(p.supplier)}" list="supplierList"></td>
-    <td><input type="text" class="edit-item" value="${escapeHtml(p.item)}" list="knownItemList"></td>
-    <td><select class="edit-set">${setOptionsHtml(p.set)}</select></td>
-    <td>
-      <select class="edit-type">
-        <option value="preorder" ${p.type === 'preorder' ? 'selected' : ''}>Preorder</option>
-        <option value="restock" ${p.type === 'restock' ? 'selected' : ''}>Restock</option>
-      </select>
-    </td>
-    <td><span class="empty-note">—</span></td>
-    <td><input type="number" step="0.01" min="0" class="edit-price" value="${p.price ?? ''}"></td>
-    <td>
-      <button class="secondary log-save-btn" data-id="${p.id}">Save</button>
-      <button class="secondary log-cancel-btn" data-id="${p.id}">Cancel</button>
-    </td>
-  `;
-}
-
-function renderLogTable() {
-  const filter = document.getElementById('filterSupplier').value;
-  const rows = purchases
-    .filter(p => !filter || p.supplier === filter)
-    .slice()
-    .sort((a, b) => b.transactionDate.localeCompare(a.transactionDate));
-
-  const el = document.getElementById('logTable');
-
-  const newRowHtml = editingPurchaseId === '__new__'
-    ? `<tr data-id="__new__">${purchaseEditCells({
-        id: '__new__', supplier: '', item: '', set: '', type: 'restock',
-        transactionDate: new Date().toISOString().slice(0, 10), price: null
-      })}</tr>`
-    : '';
-
-  if (!rows.length && !newRowHtml) {
-    el.innerHTML = '<div class="empty-note">No purchases logged yet.</div>';
-    return;
-  }
-
-  el.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Transaction date</th>
-          <th>Supplier</th>
-          <th>Item</th>
-          <th>Set</th>
-          <th>Type</th>
-          <th>Offset vs release</th>
-          <th>Price</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        ${newRowHtml}
-        ${rows.map(p => {
-          if (p.id === editingPurchaseId) {
-            return `<tr data-id="${p.id}">${purchaseEditCells(p)}</tr>`;
-          }
-          const offset = offsetForEntry(p);
-          let offsetLabel = '<span class="empty-note">not linked to a set</span>';
-          if (offset !== null) {
-            offsetLabel = p.type === 'preorder'
-              ? `${offset} day${Math.abs(offset) === 1 ? '' : 's'} before release`
-              : `${offset} day${Math.abs(offset) === 1 ? '' : 's'} after release`;
-          }
-          return `
-            <tr data-id="${p.id}">
-              <td>${fmtDate(p.transactionDate)}</td>
-              <td>${escapeHtml(p.supplier)}</td>
-              <td>${escapeHtml(p.item)}</td>
-              <td>${p.set ? escapeHtml(p.set) : '<span class="empty-note">—</span>'}</td>
-              <td><span class="pill ${p.type}">${p.type}</span></td>
-              <td>${offsetLabel}</td>
-              <td>${p.price ? '$' + Number(p.price).toFixed(2) : '—'}</td>
-              <td>
-                <button class="secondary log-edit-btn" data-id="${p.id}">Edit</button>
-                <button class="delete-btn" data-id="${p.id}" title="Delete">✕</button>
-              </td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-  el.querySelectorAll('.delete-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      btn.disabled = true;
-      try {
-        await deletePurchase(btn.dataset.id);
-        purchases = purchases.filter(p => p.id !== btn.dataset.id);
-        renderAll();
-      } catch (err) {
-        alert('Could not delete: ' + err.message);
-        btn.disabled = false;
-      }
-    });
-  });
-  el.querySelectorAll('.log-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editingPurchaseId = btn.dataset.id;
-      renderLogTable();
-    });
-  });
-  el.querySelectorAll('.log-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editingPurchaseId = null;
-      renderLogTable();
-    });
-  });
-  el.querySelectorAll('.log-save-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      const row = btn.closest('tr');
-      const transactionDate = row.querySelector('.edit-txndate').value;
-      const supplier = row.querySelector('.edit-supplier').value.trim();
-      const item = row.querySelector('.edit-item').value.trim();
-      const set = row.querySelector('.edit-set').value;
-      const type = row.querySelector('.edit-type').value;
-      const priceVal = row.querySelector('.edit-price').value;
-      const price = priceVal ? Number(priceVal) : null;
-      if (!transactionDate || !supplier || !item) {
-        alert('Transaction date, supplier, and item are required.');
-        return;
-      }
-      btn.disabled = true;
-      try {
-        if (id === '__new__') {
-          const created = await insertPurchase({ supplier, item, set, type, transactionDate, price });
-          purchases.push(created);
-        } else {
-          await updatePurchase(id, { supplier, item, set, type, transactionDate, price });
-          Object.assign(purchases.find(p => p.id === id), { supplier, item, set, type, transactionDate, price });
-        }
-        editingPurchaseId = null;
-        renderAll();
-      } catch (err) {
-        alert('Could not save: ' + err.message);
-        btn.disabled = false;
-      }
-    });
-  });
 }
 
 function escapeHtml(str) {
@@ -1337,21 +1128,13 @@ function renderCostcoView() {
 
 function renderAll() {
   renderStatRow();
-  renderKnownItemList();
   renderYearSelect();
-  renderSupplierDatalist();
+  renderOtherSupplierSelect();
   updateFocusVisibility();
   renderSupplierSummary();
-  renderLogTable();
   renderPredictionTable();
   renderPokeCenterWatch();
 }
-
-document.getElementById('addPurchaseBtn').addEventListener('click', () => {
-  document.getElementById('filterSupplier').value = '';
-  editingPurchaseId = '__new__';
-  renderLogTable();
-});
 
 document.getElementById('addReleaseBtn').addEventListener('click', () => {
   editingReleaseId = '__new__';
@@ -1382,18 +1165,6 @@ document.getElementById('refreshPredictBtn').addEventListener('click', async () 
   } finally {
     btn.disabled = false;
   }
-});
-
-document.getElementById('filterSupplier').addEventListener('change', renderLogTable);
-
-document.getElementById('exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(purchases, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `command-centre-pokemon-${new Date().toISOString().slice(0,10)}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
 });
 
 document.querySelectorAll('nav.subtabs button').forEach(btn => {
