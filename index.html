@@ -257,6 +257,28 @@
     color: var(--text-dim);
     margin-top: 6px;
   }
+  .region-block {
+    margin-bottom: 20px;
+  }
+  .region-block h3 {
+    font-size: 13px;
+    margin: 0 0 8px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+  .likelihood-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+  }
+  .likelihood-grid .likelihood-card {
+    margin-bottom: 0;
+    padding: 12px 14px;
+  }
+  .likelihood-grid .likelihood-tier {
+    font-size: 18px;
+  }
   .delete-btn {
     background: none;
     border: none;
@@ -269,9 +291,6 @@
     color: var(--text-dim);
     font-size: 13px;
     padding: 10px 0;
-  }
-  #predictionTable td > div + div {
-    margin-top: 4px;
   }
   .toolbar {
     display: flex;
@@ -300,36 +319,13 @@
 
     <div id="subtab-predict" class="subtab-content active">
 
-    <div class="stat-row" id="statRow"></div>
-
     <section class="panel">
-      <h2>Predict preorder / restock windows</h2>
+      <h2>Costco Canada restock likelihood</h2>
       <div class="field-grid">
-        <div>
-          <label for="p-focus">Focus</label>
-          <select id="p-focus">
-            <option value="costco">Costco Canada (West) — restock</option>
-            <option value="pokemoncenter">Pokémon Center — preorder</option>
-            <option value="other">Other supplier — restock</option>
-          </select>
-        </div>
-        <div id="p-other-supplier-wrap">
-          <label for="p-other-supplier">Supplier</label>
-          <select id="p-other-supplier"></select>
-        </div>
-        <div>
-          <label for="p-year">Year</label>
-          <select id="p-year"></select>
-        </div>
         <div>
           <button class="primary" id="refreshPredictBtn">Update predictions</button>
         </div>
-        <div>
-          <button class="secondary" id="addReleaseBtn">Add product</button>
-        </div>
       </div>
-      <div id="seasonalSummary" style="margin-top:14px;"></div>
-      <div id="predictionTable" style="margin-top:14px;"></div>
       <div id="costcoView" style="margin-top:14px;"></div>
     </section>
 
@@ -374,15 +370,11 @@ async function sb(path, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
-const SUPPLIER_COSTCO_WEST = 'Costco Canada (West)';
-const SUPPLIER_POKEMON_CENTER = 'Pokémon Center';
-
 let knownReleases = [];
 let purchases = [];
 let costcoSightings = [];
 let pokeCenterFindings = [];
 let pokeCenterStatus = { last_checked_at: null, last_changed_at: null };
-let editingReleaseId = null;
 let editingSightingId = null;
 
 async function loadKnownReleasesFromDB() {
@@ -444,26 +436,6 @@ async function loadPokeCenterData() {
   pokeCenterStatus = statusRows[0] || { last_checked_at: null, last_changed_at: null };
 }
 
-async function insertRelease(r) {
-  const [row] = await sb('known_releases', {
-    method: 'POST',
-    headers: { Prefer: 'return=representation' },
-    body: JSON.stringify([{ name: r.name, release_date: r.date }])
-  });
-  return { id: row.id, name: row.name, date: row.release_date };
-}
-
-async function updateRelease(id, r) {
-  await sb(`known_releases?id=eq.${id}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ name: r.name, release_date: r.date })
-  });
-}
-
-async function deleteRelease(id) {
-  await sb(`known_releases?id=eq.${id}`, { method: 'DELETE' });
-}
-
 function findKnownRelease(name) {
   const target = (name || '').trim().toLowerCase();
   return knownReleases.find(r => r.name.toLowerCase() === target);
@@ -487,19 +459,10 @@ function addDays(dateStr, n) {
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-function predictRestockDate(releaseDate) {
-  // Earliest date 30-60 days before release that falls on Mon/Tue/Wed/Thu.
-  for (let offset = 60; offset >= 30; offset--) {
-    const candidate = addDays(releaseDate, -offset);
-    const dow = new Date(candidate + 'T00:00:00Z').getUTCDay();
-    if (dow >= 1 && dow <= 4) return candidate;
-  }
-  return addDays(releaseDate, -60);
-}
-
-// Costco Canada restock likelihood: real sighting history (primary signal) blended with
-// coarse seasonal context (secondary signal). Not a predicted date — Costco doesn't publish
-// a restock schedule, so this is intentionally a Low/Medium/High read on "right now."
+// Costco Canada restock likelihood: real sighting history (primary signal, filtered per
+// region — plus any sighting with no region logged, treated as generically applicable)
+// blended with coarse seasonal context (secondary signal). Not a predicted date — Costco
+// doesn't publish a restock schedule, so this is intentionally a Low/Medium/High read.
 const COSTCO_HEAVY_MONTHS = [8, 9, 10, 11]; // Sep-Dec (0-indexed)
 const COSTCO_EASTER_MONTHS = [2, 3]; // Mar-Apr (0-indexed)
 
@@ -507,25 +470,24 @@ function weeksBetween(dateA, dateB) {
   return daysBetween(dateA, dateB) / 7;
 }
 
-function computeCostcoLikelihood() {
-  const today = new Date().toISOString().slice(0, 10);
-  const month = new Date(today + 'T00:00:00Z').getUTCMonth();
+function computeCostcoLikelihood(region, evalDate) {
+  const month = new Date(evalDate + 'T00:00:00Z').getUTCMonth();
 
   const seasonalTier = COSTCO_HEAVY_MONTHS.includes(month) ? 'High'
     : COSTCO_EASTER_MONTHS.includes(month) ? 'Medium'
     : 'Low';
 
   const observedLags = costcoSightings
-    .filter(s => s.set)
+    .filter(s => s.set && (!s.region || s.region === region))
     .map(s => {
       const known = findKnownRelease(s.set);
-      return known ? { weeks: weeksBetween(known.date, s.sightedDate), releaseName: known.name, item: s.item } : null;
+      return known ? { weeks: weeksBetween(known.date, s.sightedDate), releaseName: known.name } : null;
     })
     .filter(Boolean);
 
   const hotMatches = [];
   knownReleases.forEach(r => {
-    const weeksSince = weeksBetween(r.date, today);
+    const weeksSince = weeksBetween(r.date, evalDate);
     if (weeksSince < 0) return;
     observedLags.forEach(lag => {
       if (Math.abs(weeksSince - lag.weeks) <= 1) {
@@ -542,29 +504,19 @@ function computeCostcoLikelihood() {
     tier = seasonalTier === 'High' ? 'Medium' : seasonalTier;
   }
 
-  return { tier, seasonalTier, hasRealSignal, hotMatches, sightingCount: costcoSightings.length, month };
+  return { tier, seasonalTier, hasRealSignal, hotMatches, sightingCount: observedLags.length, month };
 }
 
 function costcoLikelihoodExplanation({ seasonalTier, hasRealSignal, hotMatches, sightingCount, month }) {
-  const parts = [];
   const monthName = MONTH_NAMES[month];
-  if (seasonalTier === 'High') {
-    parts.push(`${monthName} is historically one of Costco's heaviest Pokémon stocking months (Sep–Dec)`);
-  } else if (seasonalTier === 'Medium') {
-    parts.push(`${monthName} is in the smaller Easter-season bump (Mar–Apr)`);
-  } else {
-    parts.push(`${monthName} is historically a quieter month for Costco Pokémon stock`);
-  }
-
   if (hasRealSignal) {
     const names = [...new Set(hotMatches.map(m => m.release.name))];
-    parts.push(`this week's timing matches a previously observed restock lag for ${names.join(', ')}`);
-  } else if (sightingCount > 0) {
-    parts.push(`no known release currently matches a previously observed restock timing (based on ${sightingCount} sighting${sightingCount === 1 ? '' : 's'} logged so far)`);
-  } else {
-    parts.push('no sighting history logged yet to cross-check against');
+    return `Matches a previously observed restock lag for ${names.join(', ')}`;
   }
-  return parts.join(' — ');
+  if (seasonalTier === 'High') return `${monthName}: historically a heavy stocking month`;
+  if (seasonalTier === 'Medium') return `${monthName}: smaller Easter-season bump`;
+  if (sightingCount > 0) return `${monthName}: quiet month, no lag match (n=${sightingCount})`;
+  return `${monthName}: no sighting history for this region yet`;
 }
 
 function offsetForEntry(p) {
@@ -613,40 +565,12 @@ function supplierStats() {
   return stats;
 }
 
-function renderStatRow() {
-  const totalSpend = purchases.reduce((sum, p) => sum + (Number(p.price) || 0), 0);
-  const suppliers = new Set(purchases.map(p => p.supplier)).size;
-  const el = document.getElementById('statRow');
-  el.innerHTML = `
-    <div class="stat-card"><div class="label">Total purchases</div><div class="value">${purchases.length}</div></div>
-    <div class="stat-card"><div class="label">Suppliers tracked</div><div class="value">${suppliers}</div></div>
-    <div class="stat-card"><div class="label">Total spend</div><div class="value">$${totalSpend.toFixed(2)}</div></div>
-  `;
-}
-
 function setOptionsHtml(selectedSet) {
   const sorted = [...knownReleases].sort((a, b) => b.date.localeCompare(a.date));
   return '<option value="">— doesn\'t match a set —</option>' +
     sorted.map(r => `<option value="${escapeHtml(r.name)}" ${r.name === selectedSet ? 'selected' : ''}>${escapeHtml(r.name)} (${fmtDate(r.date)})</option>`).join('');
 }
 
-function renderOtherSupplierSelect() {
-  const historical = [...new Set(purchases.map(p => p.supplier))];
-  const otherSuppliers = historical
-    .filter(s => s !== SUPPLIER_COSTCO_WEST && s !== SUPPLIER_POKEMON_CENTER)
-    .sort();
-  const otherSelect = document.getElementById('p-other-supplier');
-  const currentOther = otherSelect.value;
-  otherSelect.innerHTML = otherSuppliers.length
-    ? otherSuppliers.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')
-    : '<option value="">No other suppliers yet</option>';
-  if (otherSuppliers.includes(currentOther)) otherSelect.value = currentOther;
-}
-
-function updateFocusVisibility() {
-  const focus = document.getElementById('p-focus').value;
-  document.getElementById('p-other-supplier-wrap').style.display = focus === 'other' ? '' : 'none';
-}
 
 function renderSupplierSummary() {
   const stats = supplierStats();
@@ -684,272 +608,7 @@ function escapeHtml(str) {
   }[c]));
 }
 
-function renderYearSelect() {
-  const select = document.getElementById('p-year');
-  const years = [...new Set(knownReleases.map(r => r.date.slice(0, 4)))].sort();
-  const current = select.value;
-  select.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
-  const thisYear = String(new Date().getFullYear());
-  if (years.includes(current)) select.value = current;
-  else if (years.includes(thisYear)) select.value = thisYear;
-}
-
-function normalizeSupplierName(s) {
-  return (s || '')
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .trim()
-    .toLowerCase();
-}
-
-function supplierEmptyInsight(supplier, type) {
-  const exact = purchases.filter(p => p.supplier === supplier);
-  const typeExact = exact.filter(p => p.type === type);
-  const normalizedTarget = normalizeSupplierName(supplier);
-  const similar = purchases.filter(p => p.supplier !== supplier && normalizeSupplierName(p.supplier) === normalizedTarget);
-  return {
-    totalExact: exact.length,
-    typeExact: typeExact.length,
-    similarCount: similar.length,
-    similarNames: [...new Set(similar.map(p => p.supplier))]
-  };
-}
-
-function supplierEmptyMessage(supplier, type, insight) {
-  if (insight.similarCount > 0) {
-    return `Found ${insight.similarCount} purchase${insight.similarCount === 1 ? '' : 's'} logged under a slightly different supplier name ("${escapeHtml(insight.similarNames.join('", "'))}") — rename to exactly "${escapeHtml(supplier)}" so it counts.`;
-  }
-  if (insight.totalExact === 0) {
-    return `No purchases logged for ${escapeHtml(supplier)} yet.`;
-  }
-  if (insight.typeExact === 0) {
-    return `You have ${insight.totalExact} ${escapeHtml(supplier)} purchase${insight.totalExact === 1 ? '' : 's'} logged, but none marked as ${type}.`;
-  }
-  return `You have ${insight.typeExact} ${type} purchase${insight.typeExact === 1 ? '' : 's'} for ${escapeHtml(supplier)}, but the item name${insight.typeExact === 1 ? '' : 's'} didn't match a known product — check spelling against the item list.`;
-}
-
 const MONTH_NAMES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-
-function seasonalPattern(supplier) {
-  const months = purchases
-    .filter(p => p.supplier === supplier)
-    .map(p => new Date(p.transactionDate + 'T00:00:00Z').getUTCMonth());
-  const active = [...new Set(months)].sort((a, b) => a - b);
-  const quiet = MONTH_NAMES.map((_, i) => i).filter(i => !active.includes(i));
-  return {
-    count: months.length,
-    active: active.map(i => MONTH_NAMES[i]),
-    quiet: quiet.map(i => MONTH_NAMES[i])
-  };
-}
-
-function renderSeasonalSummary(supplier) {
-  const el = document.getElementById('seasonalSummary');
-  if (!supplier) {
-    el.innerHTML = '';
-    return;
-  }
-  const { count, active, quiet } = seasonalPattern(supplier);
-  if (!count) {
-    el.innerHTML = '';
-    return;
-  }
-  el.innerHTML = `
-    <div class="empty-note">
-      Based on <strong>${count}</strong> purchase${count === 1 ? '' : 's'} logged for ${escapeHtml(supplier)} —
-      historically active months: <strong>${active.join(', ')}</strong>.
-      ${quiet.length ? `Quiet months: ${quiet.join(', ')}.` : ''}
-    </div>
-  `;
-}
-
-function focusConfig() {
-  const focus = document.getElementById('p-focus').value;
-  if (focus === 'costco') return { supplier: SUPPLIER_COSTCO_WEST, type: 'restock' };
-  if (focus === 'pokemoncenter') return { supplier: SUPPLIER_POKEMON_CENTER, type: 'preorder' };
-  return { supplier: document.getElementById('p-other-supplier').value, type: 'restock' };
-}
-
-function renderPredictionTable() {
-  const { supplier, type } = focusConfig();
-  const year = document.getElementById('p-year').value;
-  const el = document.getElementById('predictionTable');
-  const costcoEl = document.getElementById('costcoView');
-
-  if (supplier === SUPPLIER_COSTCO_WEST) {
-    document.getElementById('seasonalSummary').innerHTML = '';
-    el.style.display = 'none';
-    costcoEl.style.display = '';
-    renderCostcoView();
-    return;
-  }
-  el.style.display = '';
-  costcoEl.style.display = 'none';
-
-  renderSeasonalSummary(supplier);
-
-  if (!supplier) {
-    el.innerHTML = '<div class="empty-note">Log a restock purchase from another supplier to see this view.</div>';
-    return;
-  }
-
-  const stats = supplierStats()[supplier];
-  const avgKey = type + 'Avg';
-  const countKey = type + 'Count';
-  const stdDevKey = type + 'StdDev';
-  const releases = knownReleases
-    .filter(r => r.date.slice(0, 4) === year)
-    .sort((a, b) => a.date.localeCompare(b.date));
-
-  if (!releases.length) {
-    el.innerHTML = '<div class="empty-note">No known Pokémon product releases for this year.</div>';
-    return;
-  }
-
-  const typeLabel = type === 'preorder' ? 'preorder open' : 'restock';
-  const emptyMsg = (!stats || !stats[countKey])
-    ? supplierEmptyMessage(supplier, type, supplierEmptyInsight(supplier, type))
-    : '';
-
-  const newReleaseRowHtml = editingReleaseId === '__new__'
-    ? `
-      <tr data-id="__new__">
-        <td><input type="text" class="edit-release-name" value=""></td>
-        <td><input type="date" class="edit-release-date" value="${year}-01-01"></td>
-        <td><span class="empty-note">—</span></td>
-        <td><button class="secondary release-save-btn" data-id="__new__">Save</button> <button class="secondary release-cancel-btn" data-id="__new__">Cancel</button></td>
-      </tr>
-    `
-    : '';
-
-  el.innerHTML = `
-    <table>
-      <thead>
-        <tr>
-          <th>Product</th>
-          <th>Official release date</th>
-          <th>Predicted ${typeLabel} date</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${newReleaseRowHtml}
-        ${releases.map(r => {
-          const isEditing = editingReleaseId === r.id;
-          const productCell = isEditing
-            ? `<input type="text" class="edit-release-name" value="${escapeHtml(r.name)}">`
-            : escapeHtml(r.name);
-          const dateCell = isEditing
-            ? `<input type="date" class="edit-release-date" value="${r.date}">`
-            : fmtDate(r.date);
-          const actionsCell = isEditing
-            ? `<button class="secondary release-save-btn" data-id="${r.id}">Save</button> <button class="secondary release-cancel-btn" data-id="${r.id}">Cancel</button>`
-            : `<button class="secondary release-edit-btn" data-id="${r.id}">Edit</button> <button class="delete-btn release-delete-btn" data-id="${r.id}" title="Delete">✕</button>`;
-
-          if (type === 'restock') {
-            const predicted = predictRestockDate(r.date);
-            return `
-              <tr data-id="${r.id}">
-                <td>${productCell}</td>
-                <td>${dateCell}</td>
-                <td>${fmtDate(predicted)}</td>
-                <td>${actionsCell}</td>
-              </tr>
-            `;
-          }
-          const n = stats ? stats[countKey] : 0;
-          if (!n) {
-            return `
-              <tr data-id="${r.id}">
-                <td>${productCell}</td>
-                <td>${dateCell}</td>
-                <td><span class="empty-note">${emptyMsg}</span></td>
-                <td>${actionsCell}</td>
-              </tr>
-            `;
-          }
-          const avgVal = stats[avgKey];
-          const sd = Math.round(stats[stdDevKey]);
-          const predicted = addDays(r.date, -Math.round(avgVal));
-          const rangeLabel = sd > 0 ? ` (±${sd}d)` : '';
-          return `
-            <tr data-id="${r.id}">
-              <td>${productCell}</td>
-              <td>${dateCell}</td>
-              <td>${fmtDate(predicted)}${rangeLabel}</td>
-              <td>${actionsCell}</td>
-            </tr>
-          `;
-        }).join('')}
-      </tbody>
-    </table>
-  `;
-
-  el.querySelectorAll('.release-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editingReleaseId = btn.dataset.id;
-      renderPredictionTable();
-    });
-  });
-  el.querySelectorAll('.release-cancel-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      editingReleaseId = null;
-      renderPredictionTable();
-    });
-  });
-  el.querySelectorAll('.release-save-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      const row = btn.closest('tr');
-      const newName = row.querySelector('.edit-release-name').value.trim();
-      const newDate = row.querySelector('.edit-release-date').value;
-      if (!newName || !newDate) {
-        alert('Product name and official release date are required.');
-        return;
-      }
-      btn.disabled = true;
-      try {
-        if (id === '__new__') {
-          const created = await insertRelease({ name: newName, date: newDate });
-          knownReleases.push(created);
-        } else {
-          const existing = knownReleases.find(r => r.id === id);
-          const oldName = existing.name;
-          await updateRelease(id, { name: newName, date: newDate });
-          existing.name = newName;
-          existing.date = newDate;
-          if (oldName !== newName) {
-            // Postgres cascades the rename to purchases.set_name (ON UPDATE CASCADE) —
-            // refetch so the local copy reflects it.
-            await loadPurchasesFromDB();
-          }
-        }
-        editingReleaseId = null;
-        renderAll();
-      } catch (err) {
-        alert('Could not save: ' + err.message);
-        btn.disabled = false;
-      }
-    });
-  });
-  el.querySelectorAll('.release-delete-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const id = btn.dataset.id;
-      btn.disabled = true;
-      try {
-        await deleteRelease(id);
-        knownReleases = knownReleases.filter(r => r.id !== id);
-        if (editingReleaseId === id) editingReleaseId = null;
-        // Postgres cascades the delete to SET NULL on purchases.set_name — refetch to reflect it.
-        await loadPurchasesFromDB();
-        renderAll();
-      } catch (err) {
-        alert('Could not delete: ' + err.message);
-        btn.disabled = false;
-      }
-    });
-  });
-}
 
 const POKECENTER_ACK_KEY = 'commandCentre.pokemon.pokecenterAcked';
 
@@ -1003,11 +662,35 @@ function sightingEditCells(s) {
   `;
 }
 
+function likelihoodCardHtml(label, result) {
+  const tierClass = `likelihood-${result.tier.toLowerCase()}`;
+  const explanation = costcoLikelihoodExplanation(result);
+  return `
+    <div class="likelihood-card ${tierClass}">
+      <div class="label">${escapeHtml(label)}</div>
+      <div class="likelihood-tier"><span class="pill ${tierClass}">${result.tier}</span></div>
+      <div class="likelihood-explanation">${escapeHtml(explanation)}</div>
+    </div>
+  `;
+}
+
 function renderCostcoView() {
   const el = document.getElementById('costcoView');
-  const likelihood = computeCostcoLikelihood();
-  const explanation = costcoLikelihoodExplanation(likelihood);
-  const tierClass = `likelihood-${likelihood.tier.toLowerCase()}`;
+  const today = new Date().toISOString().slice(0, 10);
+  const horizons = [
+    { label: 'This week', date: today },
+    { label: 'Next week', date: addDays(today, 7) },
+    { label: 'Next month', date: addDays(today, 30) }
+  ];
+
+  const regionBlocks = ['BC', 'ON'].map(region => `
+    <div class="region-block">
+      <h3>Costco ${region}</h3>
+      <div class="likelihood-grid">
+        ${horizons.map(h => likelihoodCardHtml(h.label, computeCostcoLikelihood(region, h.date))).join('')}
+      </div>
+    </div>
+  `).join('');
 
   const sightingsSorted = [...costcoSightings].sort((a, b) => b.sightedDate.localeCompare(a.sightedDate));
 
@@ -1018,11 +701,7 @@ function renderCostcoView() {
     : '';
 
   el.innerHTML = `
-    <div class="likelihood-card ${tierClass}">
-      <div class="label">This week's Costco Canada (West) restock likelihood</div>
-      <div class="likelihood-tier"><span class="pill ${tierClass}">${likelihood.tier}</span></div>
-      <div class="likelihood-explanation">${escapeHtml(explanation)}</div>
-    </div>
+    ${regionBlocks}
     <div class="toolbar">
       <button class="primary" id="addSightingBtn">Add sighting</button>
     </div>
@@ -1127,33 +806,11 @@ function renderCostcoView() {
 }
 
 function renderAll() {
-  renderStatRow();
-  renderYearSelect();
-  renderOtherSupplierSelect();
-  updateFocusVisibility();
   renderSupplierSummary();
-  renderPredictionTable();
+  renderCostcoView();
   renderPokeCenterWatch();
 }
 
-document.getElementById('addReleaseBtn').addEventListener('click', () => {
-  editingReleaseId = '__new__';
-  renderPredictionTable();
-});
-
-document.getElementById('p-focus').addEventListener('change', () => {
-  editingReleaseId = null;
-  updateFocusVisibility();
-  renderPredictionTable();
-});
-document.getElementById('p-other-supplier').addEventListener('change', () => {
-  editingReleaseId = null;
-  renderPredictionTable();
-});
-document.getElementById('p-year').addEventListener('change', () => {
-  editingReleaseId = null;
-  renderPredictionTable();
-});
 document.getElementById('refreshPredictBtn').addEventListener('click', async () => {
   const btn = document.getElementById('refreshPredictBtn');
   btn.disabled = true;
